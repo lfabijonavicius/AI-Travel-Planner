@@ -3,6 +3,7 @@
 import { PlaceResult } from "@/types"
 import { useTripStore } from "@/hooks/useTripStore"
 import { MapPin } from "lucide-react"
+import { useScrollToLatest } from "@/hooks/useScrollToLatest"
 
 interface Props {
   data: PlaceResult[]
@@ -10,11 +11,12 @@ interface Props {
 
 export function PlaceCard({ data }: Props) {
   const { pinnedPlaceIds, togglePin, setHoveredPlace, setSelectedPlaceDetail } = useTripStore()
+  const cardRef = useScrollToLatest(data)
 
   if (!data?.length || (data[0] as any)?.error) return null
 
   return (
-    <div className="my-2 grid grid-cols-3 gap-2">
+    <div ref={cardRef} className="my-2 grid grid-cols-3 gap-2">
       {data.map((place, i) => {
         const isPinned = pinnedPlaceIds.has(place.name)
         return (
@@ -88,11 +90,11 @@ export function PlaceCard({ data }: Props) {
               className="px-2.5 pt-2 pb-1 flex-1 cursor-pointer"
               onClick={() => setSelectedPlaceDetail(place)}
             >
-              <p className="text-xs font-semibold leading-snug line-clamp-2" style={{ color: "var(--text)" }}>
+              <p className="text-xs font-semibold leading-snug line-clamp-2 tracking-tight" style={{ color: "var(--text)" }}>
                 {place.name}
               </p>
               {place.summary && (
-                <p className="text-xs mt-1 line-clamp-2 leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                <p className="text-xs mt-1 line-clamp-2 leading-relaxed" style={{ color: "var(--text-muted)", fontSize: "11px" }}>
                   {place.summary}
                 </p>
               )}

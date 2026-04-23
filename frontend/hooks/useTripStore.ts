@@ -70,6 +70,15 @@ interface TripStore {
   // Place detail drawer
   selectedPlaceDetail: import("@/types").PlaceResult | null
   setSelectedPlaceDetail: (place: import("@/types").PlaceResult | null) => void
+
+  // Hotel detail drawer
+  selectedHotelDetail: import("@/types").HotelResult | null
+  setSelectedHotelDetail: (hotel: import("@/types").HotelResult | null) => void
+
+  // Skeleton cards shown while tools are running
+  activeSkeletons: Partial<Record<"search_flights" | "search_hotels" | "get_weather_forecast" | "search_places" | "get_country_info", boolean>>
+  addSkeleton: (tool: string) => void
+  removeSkeleton: (tool: string) => void
 }
 
 export const useTripStore = create<TripStore>((set, get) => ({
@@ -170,10 +179,14 @@ export const useTripStore = create<TripStore>((set, get) => ({
       case "search_places": {
         const newPlaces = output as PlaceResult[]
         const first = newPlaces.find((p) => p.lat && p.lng)
-        set((s) => ({
-          places: [...s.places, ...newPlaces],
-          ...(first ? { targetLocation: { lat: first.lat, lng: first.lng } } : {}),
-        }))
+        set((s) => {
+          const existingNames = new Set(s.places.map((p) => p.name))
+          const deduped = newPlaces.filter((p) => !existingNames.has(p.name))
+          return {
+            places: [...s.places, ...deduped],
+            ...(first ? { targetLocation: { lat: first.lat, lng: first.lng } } : {}),
+          }
+        })
         break
       }
       case "get_country_info":
@@ -220,6 +233,19 @@ export const useTripStore = create<TripStore>((set, get) => ({
     }),
 
   selectedPlaceDetail: null,
-  setSelectedPlaceDetail: (place) => set({ selectedPlaceDetail: place }),
+  setSelectedPlaceDetail: (place) => set({ selectedPlaceDetail: place, selectedHotelDetail: null }),
+
+  selectedHotelDetail: null,
+  setSelectedHotelDetail: (hotel) => set({ selectedHotelDetail: hotel, selectedPlaceDetail: null }),
+
+  activeSkeletons: {},
+  addSkeleton: (tool) =>
+    set((s) => ({ activeSkeletons: { ...s.activeSkeletons, [tool]: true } })),
+  removeSkeleton: (tool) =>
+    set((s) => {
+      const next = { ...s.activeSkeletons }
+      delete next[tool as keyof typeof next]
+      return { activeSkeletons: next }
+    }),
 })
 )

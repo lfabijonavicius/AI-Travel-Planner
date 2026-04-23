@@ -7,7 +7,7 @@ import { SSEEvent, ChatMessage, TripContext } from "@/types"
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 export function useSSE() {
-  const { addMessage, appendToken, setStreaming, setToolResult, addToolCallToLast, resolveToolCall } = useTripStore()
+  const { addMessage, appendToken, setStreaming, setToolResult, addToolCallToLast, resolveToolCall, addSkeleton, removeSkeleton } = useTripStore()
 
   const sendMessage = useCallback(
     async (text: string, context: TripContext = {}) => {
@@ -96,11 +96,18 @@ export function useSSE() {
         snapshot.currency_fetched = { base: s.currency.base, target: s.currency.target, rate: s.currency.rate }
       }
 
+      // Send last 8 messages as history (excluding the current user msg + empty assistant we just seeded)
+      const history = s.messages
+        .slice(0, -2)
+        .filter((m) => m.content.trim().length > 10)
+        .slice(-8)
+        .map((m) => ({ role: m.role, content: m.content.slice(0, 800).trim() }))
+
       try {
         const response = await fetch(`${API_URL}/api/chat/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, context, snapshot }),
+          body: JSON.stringify({ message: text, context, snapshot, history }),
         })
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -133,7 +140,7 @@ export function useSSE() {
         setStreaming(false)
       }
     },
-    [addMessage, appendToken, setStreaming, setToolResult, addToolCallToLast, resolveToolCall]
+    [addMessage, appendToken, setStreaming, setToolResult, addToolCallToLast, resolveToolCall, addSkeleton, removeSkeleton]
   )
 
   function handleEvent(event: SSEEvent) {
@@ -143,10 +150,14 @@ export function useSSE() {
         break
       case "tool_start":
         addToolCallToLast({ tool: event.tool, inputs: event.inputs })
+        if (["search_flights", "search_hotels", "get_weather_forecast", "search_places", "get_country_info"].includes(event.tool)) {
+          addSkeleton(event.tool)
+        }
         break
       case "tool_result":
         setToolResult(event.tool, event.output)
         resolveToolCall(event.tool, event.output)
+        removeSkeleton(event.tool)
         break
       case "error":
         appendToken(`\n\n_${event.content}_`)

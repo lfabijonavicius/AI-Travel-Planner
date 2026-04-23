@@ -5,6 +5,7 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from config import settings
+from agent.skills import inject_skill
 
 ITINERARY_SYSTEM = """You are a travel itinerary planner. Output ONLY a raw JSON object — no prose, no markdown, no code fences.
 
@@ -62,6 +63,7 @@ def generate_itinerary(
             f"Weather: {json.dumps(slim_weather)}\n\n"
             "Return the JSON object only."
         )
+        prompt = inject_skill("itinerary_builder", prompt)
 
         messages = [SystemMessage(content=ITINERARY_SYSTEM), HumanMessage(content=prompt)]
 

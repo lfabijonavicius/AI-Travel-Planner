@@ -89,7 +89,9 @@ export function MapPane() {
     ;(window as any).__voyagerOpenDrawer = (name: string) => {
       const store = useTripStore.getState()
       const place = store.places.find((p) => p.name === name)
-      if (place) store.setSelectedPlaceDetail(place)
+      if (place) { store.setSelectedPlaceDetail(place); return }
+      const hotel = store.hotels.find((h) => h.name === name)
+      if (hotel) store.setSelectedHotelDetail(hotel)
     }
     return () => {
       delete (window as any).__voyagerTogglePin

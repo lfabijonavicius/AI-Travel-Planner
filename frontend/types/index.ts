@@ -48,6 +48,14 @@ export interface WeatherDay {
   precipitation_probability: number
 }
 
+export interface PlaceReview {
+  author: string
+  author_photo: string | null
+  rating: number | null
+  text: string
+  relative_time: string
+}
+
 export interface PlaceResult {
   name: string
   category: string
@@ -59,6 +67,8 @@ export interface PlaceResult {
   open_now: boolean | null
   summary: string | null
   photo_url: string | null
+  photo_urls?: string[]
+  reviews?: PlaceReview[]
 }
 
 export interface CountryInfo {

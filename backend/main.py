@@ -25,6 +25,7 @@ class ChatRequest(BaseModel):
     message: str
     context: dict = {}
     snapshot: dict = {}
+    history: list[dict] = []
 
 
 @app.get("/health")
@@ -45,6 +46,8 @@ async def stream_chat(request: ChatRequest):
     """
     async def event_generator():
         try:
+            result_buffer: list[str] = []  # buffered tool_result SSE lines
+
             # Build enriched user message so the agent knows what was already found
             user_message = request.message
             if request.snapshot:
@@ -91,9 +94,17 @@ async def stream_chat(request: ChatRequest):
             today = date.today().isoformat()
             dated_message = f"[Today's date: {today}]\n\n{user_message}"
 
+            # Build message history: prior turns + current message
+            history_msgs = [
+                (h["role"], h["content"])
+                for h in request.history
+                if h.get("content", "").strip()
+            ]
+            messages = history_msgs + [("user", dated_message)]
+
             async for event in graph.astream_events(
                 {
-                    "messages": [("user", dated_message)],
+                    "messages": messages,
                     "trip_context": request.context,
                     "tool_results": {},
                     "itinerary": None,
@@ -105,12 +116,14 @@ async def stream_chat(request: ChatRequest):
                 if kind == "on_chat_model_stream":
                     chunk = event["data"]["chunk"].content
                     if chunk:
+                        # Narrative tokens stream live
                         yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
 
                 elif kind == "on_tool_start":
                     tool_name = event.get("name", "")
                     inputs = event["data"].get("input", {})
                     logger.info(f"Tool start: {tool_name} inputs={inputs}")
+                    # Tool indicators stream live so user sees progress
                     yield f"data: {json.dumps({'type': 'tool_start', 'tool': tool_name, 'inputs': inputs})}\n\n"
 
                 elif kind == "on_tool_end":
@@ -126,7 +139,14 @@ async def stream_chat(request: ChatRequest):
                     else:
                         output = raw_output
                     logger.info(f"Tool end: {tool_name}")
-                    yield f"data: {json.dumps({'type': 'tool_result', 'tool': tool_name, 'output': output})}\n\n"
+                    # Buffer card results — flush after narrative is done
+                    result_buffer.append(
+                        f"data: {json.dumps({'type': 'tool_result', 'tool': tool_name, 'output': output})}\n\n"
+                    )
+
+            # Flush all card results after the narrative has fully streamed
+            for line in result_buffer:
+                yield line
 
         except Exception as e:
             logger.error(f"Stream error: {e}")

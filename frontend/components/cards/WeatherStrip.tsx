@@ -1,16 +1,19 @@
 import { WeatherDay } from "@/types"
+import { useScrollToLatest } from "@/hooks/useScrollToLatest"
 
 interface Props {
   data: WeatherDay[]
 }
 
 export function WeatherStrip({ data }: Props) {
+  const cardRef = useScrollToLatest(data)
+
   if (!data?.length || (data[0] as any)?.error) {
     return null
   }
 
   return (
-    <div className="my-2 rounded-xl overflow-hidden" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+    <div ref={cardRef} className="my-2 rounded-xl overflow-hidden" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
       <div className="grid" style={{ gridTemplateColumns: `repeat(${Math.min(data.length, 7)}, 1fr)` }}>
         {data.slice(0, 7).map((day) => {
           const isRainy = day.precipitation_probability >= 60

@@ -1,10 +1,13 @@
 import { CountryInfo } from "@/types"
+import { useScrollToLatest } from "@/hooks/useScrollToLatest"
 
 interface Props {
   data: CountryInfo
 }
 
 export function CountryInfoPanel({ data }: Props) {
+  const cardRef = useScrollToLatest(data)
+
   if (!data || (data as any).error) return null
 
   const tiles = [
@@ -18,6 +21,7 @@ export function CountryInfoPanel({ data }: Props) {
 
   return (
     <div
+      ref={cardRef}
       className="my-2 rounded-xl overflow-hidden"
       style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
     >

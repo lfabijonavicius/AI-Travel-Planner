@@ -7,18 +7,32 @@ import { ToolCallIndicator } from "./ToolCallIndicator"
 import { InlineCardRenderer } from "./InlineCardRenderer"
 import { ChatInput } from "./ChatInput"
 import { useSSE } from "@/hooks/useSSE"
+import { SkeletonCard } from "@/components/cards/SkeletonCard"
 
 // Tools that render silently in the right panel — no inline card
 const SILENT_TOOLS = new Set(["calculate_budget", "get_currency_exchange", "generate_itinerary"])
 
+const SKELETON_TYPE_MAP: Record<string, "flight" | "hotel" | "weather" | "place" | "country"> = {
+  search_flights:       "flight",
+  search_hotels:        "hotel",
+  get_weather_forecast: "weather",
+  search_places:        "place",
+  get_country_info:     "country",
+}
+
 export function ChatWindow() {
-  const { messages, isStreaming } = useTripStore()
+  const { messages, isStreaming, activeSkeletons } = useTripStore()
   const { sendMessage } = useSSE()
   const bottomRef = useRef<HTMLDivElement>(null)
+  const prevMessageCount = useRef(messages.length)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+    const newCount = messages.length
+    if (newCount > prevMessageCount.current) {
+      prevMessageCount.current = newCount
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [messages.length])
 
   return (
     <div className="flex flex-col h-full">
@@ -43,6 +57,14 @@ export function ChatWindow() {
             )}
           </div>
         ))}
+
+          {/* Skeleton cards for tools currently running */}
+          {Object.entries(activeSkeletons).map(([tool, active]) => {
+            if (!active) return null
+            const skeletonType = SKELETON_TYPE_MAP[tool]
+            if (!skeletonType) return null
+            return <SkeletonCard key={tool} type={skeletonType} />
+          })}
 
           <div ref={bottomRef} />
         </div>

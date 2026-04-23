@@ -3,6 +3,7 @@
 import { FlightResult } from "@/types"
 import { useTripStore } from "@/hooks/useTripStore"
 import { Plane, ArrowRight } from "lucide-react"
+import { useScrollToLatest } from "@/hooks/useScrollToLatest"
 
 interface Props {
   data: FlightResult[]
@@ -10,13 +11,14 @@ interface Props {
 
 export function FlightCard({ data }: Props) {
   const { selectedFlight, setSelectedFlight } = useTripStore()
+  const cardRef = useScrollToLatest(data)
 
   if (!data?.length || (data[0] as any)?.error) {
     return <ErrorCard message={(data[0] as any)?.error ?? "No flights found"} />
   }
 
   return (
-    <div className="my-2 space-y-1.5">
+    <div ref={cardRef} className="my-2 space-y-1.5">
       {data.map((flight, i) => {
         const isSelected = selectedFlight?.flight_number === flight.flight_number
         return (

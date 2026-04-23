@@ -12,17 +12,31 @@ interface Props {
 // ── PlaceLink: inline-styled interactive span ─────────────────────────────────
 
 function PlaceLink({ storeName, children }: { storeName: string; children: React.ReactNode }) {
-  const setHoveredPlace = useTripStore((s) => s.setHoveredPlace)
+  const { setHoveredPlace, setSelectedPlaceDetail, setSelectedHotelDetail, places, hotels } = useTripStore()
   const [hovered, setHovered] = useState(false)
+
+  function handleClick() {
+    const place = places.find((p) => p.name === storeName)
+    if (place) {
+      setSelectedPlaceDetail(place)
+      return
+    }
+    const hotel = hotels.find((h) => h.name === storeName)
+    if (hotel) {
+      setSelectedHotelDetail(hotel)
+      return
+    }
+    setHoveredPlace(storeName)
+  }
+
   return (
     <span
       onMouseEnter={() => { setHovered(true); setHoveredPlace(storeName) }}
       onMouseLeave={() => { setHovered(false); setHoveredPlace(null) }}
+      onClick={handleClick}
       style={{
         color: hovered ? "#7bbff5" : "#2e8fe0",
-        borderBottom: `1px dotted ${hovered ? "#7bbff5" : "#2e8fe0"}`,
-        cursor: "crosshair",
-        paddingBottom: "1px",
+        cursor: "pointer",
         textShadow: hovered ? "0 0 10px rgba(91,163,232,0.6)" : "none",
         transition: "color 0.15s, text-shadow 0.15s",
       }}
@@ -99,8 +113,8 @@ export function ChatBubble({ message }: Props) {
   return (
     <div className="flex justify-start">
       <div
-        className="max-w-[85%] px-4 py-3 rounded-2xl rounded-tl-sm text-sm leading-relaxed"
-        style={{ background: "var(--surface-2)", color: "var(--text)" }}
+        className="max-w-[85%] px-4 py-3 rounded-2xl rounded-tl-sm text-sm"
+        style={{ background: "var(--surface-2)", color: "var(--text)", lineHeight: "1.625" }}
       >
         <ReactMarkdown
           urlTransform={urlTransform}

@@ -3,6 +3,7 @@
 import { HotelResult } from "@/types"
 import { useTripStore } from "@/hooks/useTripStore"
 import { Star, ArrowRight } from "lucide-react"
+import { useScrollToLatest } from "@/hooks/useScrollToLatest"
 
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -21,6 +22,7 @@ interface Props {
 
 export function HotelCard({ data }: Props) {
   const { selectedHotel, setSelectedHotel, setHoveredPlace } = useTripStore()
+  const cardRef = useScrollToLatest(data)
 
   if (!data?.length || (data[0] as any)?.error) {
     return (
@@ -31,7 +33,7 @@ export function HotelCard({ data }: Props) {
   }
 
   return (
-    <div className="my-2 grid grid-cols-2 gap-2">
+    <div ref={cardRef} className="my-2 grid grid-cols-2 gap-2">
       {data.map((hotel, i) => {
         const isSelected = selectedHotel?.name === hotel.name
         const sym = currencySymbol(hotel.currency)
@@ -78,7 +80,7 @@ export function HotelCard({ data }: Props) {
 
             {/* Info */}
             <div className="p-2.5 space-y-1.5">
-              <p className="text-xs font-medium leading-snug line-clamp-2" style={{ color: "var(--text)" }}>{hotel.name}</p>
+              <p className="text-xs font-semibold leading-snug line-clamp-2 tracking-tight" style={{ color: "var(--text)" }}>{hotel.name}</p>
               {hotel.stars > 0 && (
                 <div className="flex gap-0.5">
                   {Array.from({ length: hotel.stars }).map((_, j) => (
