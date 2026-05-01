@@ -1,9 +1,40 @@
 "use client"
 
+import { useState } from "react"
 import dynamic from "next/dynamic"
+import { ChevronDown, ChevronUp } from "lucide-react"
 import { useTripStore } from "@/hooks/useTripStore"
 
 const MiniMap = dynamic(() => import("@/components/map/MiniMap").then((m) => m.MiniMap), { ssr: false })
+
+function CollapsibleSection({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
+  return (
+    <section className="border-b" style={{ borderColor: "var(--border)" }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 cursor-pointer"
+      >
+        <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+          {title}
+        </h3>
+        {open
+          ? <ChevronUp size={13} style={{ color: "var(--text-muted)" }} />
+          : <ChevronDown size={13} style={{ color: "var(--text-muted)" }} />}
+      </button>
+      {open && <div className="px-4 pb-4">{children}</div>}
+    </section>
+  )
+}
 
 export function RightPanel() {
   const { budget, currency } = useTripStore()
@@ -14,10 +45,7 @@ export function RightPanel() {
       style={{ background: "var(--surface)", borderColor: "var(--border)" }}
     >
       {/* Budget tracker */}
-      <section className="p-4 border-b" style={{ borderColor: "var(--border)" }}>
-        <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-          Budget
-        </h3>
+      <CollapsibleSection title="Budget">
         {budget ? (
           <div className="space-y-2">
             {Object.entries(budget.breakdown).map(([key, val]) => (
@@ -66,13 +94,10 @@ export function RightPanel() {
             ))}
           </div>
         )}
-      </section>
+      </CollapsibleSection>
 
       {/* Currency */}
-      <section className="p-4 border-b" style={{ borderColor: "var(--border)" }}>
-        <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-          Currency
-        </h3>
+      <CollapsibleSection title="Currency">
         {currency ? (
           <div className="space-y-1.5">
             <div className="flex items-baseline gap-1">
@@ -93,7 +118,7 @@ export function RightPanel() {
         ) : (
           <p className="text-xs" style={{ color: "var(--border)" }}>—</p>
         )}
-      </section>
+      </CollapsibleSection>
 
       {/* MiniMap */}
       <section className="p-4">

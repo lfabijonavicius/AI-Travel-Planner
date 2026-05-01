@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react"
 import { useTripStore } from "@/hooks/useTripStore"
 import { ItineraryDay, ItineraryEvent } from "@/types"
+import { resolveItineraryEventEntity } from "@/lib/itineraryEventResolver"
 
 const TYPE_COLORS: Record<string, string> = {
   flight:    "#3b82f6",
@@ -22,11 +23,34 @@ const TYPE_ICONS: Record<string, string> = {
   transport: "🚌",
 }
 
-function EventRow({ event }: { event: ItineraryEvent }) {
+function EventRow({
+  event,
+  isSelected,
+  onClick,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  event: ItineraryEvent
+  isSelected: boolean
+  onClick: () => void
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+}) {
   const color = TYPE_COLORS[event.type] ?? "#6b7280"
   const icon  = TYPE_ICONS[event.type] ?? "•"
   return (
-    <div className="flex gap-3 px-4 py-3" style={{ borderTop: "1px solid var(--border)" }}>
+    <button
+      type="button"
+      className="flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-[rgba(255,255,255,0.02)]"
+      style={{
+        borderTop: "1px solid var(--border)",
+        background: isSelected ? "rgba(61,140,214,0.09)" : "transparent",
+        boxShadow: isSelected ? "inset 3px 0 0 0 var(--accent-light)" : "none",
+      }}
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       <div className="flex-shrink-0 w-5 text-center text-sm leading-5" style={{ marginTop: "1px" }}>
         {icon}
       </div>
@@ -47,7 +71,7 @@ function EventRow({ event }: { event: ItineraryEvent }) {
             </span>
           )}
         </div>
-        <p className="text-sm font-semibold leading-snug" style={{ color: "var(--text)" }}>
+        <p className="text-sm font-semibold leading-snug" style={{ color: isSelected ? "var(--accent-light)" : "var(--text)" }}>
           {event.title}
         </p>
         {event.subtitle && (
@@ -56,8 +80,15 @@ function EventRow({ event }: { event: ItineraryEvent }) {
           </p>
         )}
       </div>
-    </div>
+    </button>
   )
+}
+
+function formatDisplayDate(iso: string | undefined, opts: Intl.DateTimeFormatOptions): string | null {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null
+  const dt = new Date(iso + "T12:00:00")
+  if (Number.isNaN(dt.getTime())) return null
+  return dt.toLocaleDateString("en-GB", opts)
 }
 
 function DayCard({
@@ -71,6 +102,75 @@ function DayCard({
   isFiltered: boolean
   onClick: () => void
 }) {
+  const {
+    places,
+    hotels,
+    selectedItineraryEventKey,
+    setSelectedItineraryEventKey,
+    setHoveredPlace,
+    setSelectedPlaceDetail,
+    setSelectedHotelDetail,
+    setSelectedItineraryEventDetail,
+    setTargetLocation,
+  } = useTripStore()
+
+  function eventKeyFor(event: ItineraryEvent, index: number) {
+    return `${day.day_number}-${event.time}-${event.title}-${index}`
+  }
+
+  function handleEventClick(event: ItineraryEvent, index: number) {
+    onClick()
+    setSelectedItineraryEventKey(eventKeyFor(event, index))
+    const resolved = resolveItineraryEventEntity({
+      event,
+      dayLabel: day.label,
+      city: day.city,
+      date: day.date,
+      places,
+      hotels,
+    })
+
+    if (resolved.place) {
+      setSelectedPlaceDetail(resolved.place)
+      if (resolved.place.lat && resolved.place.lng) {
+        setTargetLocation({ lat: resolved.place.lat, lng: resolved.place.lng })
+      }
+      return
+    }
+
+    if (resolved.hotel) {
+      setSelectedHotelDetail(resolved.hotel)
+      if (resolved.hotel.lat && resolved.hotel.lng) {
+        setTargetLocation({ lat: resolved.hotel.lat, lng: resolved.hotel.lng })
+      }
+      return
+    }
+
+    setSelectedItineraryEventDetail(resolved.fallback)
+    if (resolved.fallback.coordinates) {
+      setTargetLocation(resolved.fallback.coordinates)
+    }
+  }
+
+  function handleEventHover(event: ItineraryEvent) {
+    const resolved = resolveItineraryEventEntity({
+      event,
+      dayLabel: day.label,
+      city: day.city,
+      date: day.date,
+      places,
+      hotels,
+    })
+
+    if (resolved.place) {
+      setHoveredPlace(resolved.place.name)
+      return
+    }
+    if (resolved.hotel) {
+      setHoveredPlace(resolved.hotel.name)
+    }
+  }
+
   return (
     <div
       className="flex gap-4 transition-opacity duration-300"
@@ -109,9 +209,9 @@ function DayCard({
               {day.label}
             </p>
             <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-              {new Date(day.date + "T12:00:00").toLocaleDateString("en-GB", {
+              {formatDisplayDate(day.date, {
                 weekday: "long", day: "numeric", month: "short",
-              })}
+              }) ?? day.date}
               {" · "}{day.city}
             </p>
           </div>
@@ -119,10 +219,10 @@ function DayCard({
             <span className="text-lg leading-none">{day.weather_icon}</span>
             <div className="text-right">
               <p className="text-xs font-semibold" style={{ color: "var(--text)" }}>
-                {day.weather_high}°
+                {Number.isFinite(day.weather_high) ? `${day.weather_high}°` : "—"}
               </p>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                {day.weather_low}°
+                {Number.isFinite(day.weather_low) ? `${day.weather_low}°` : "—"}
               </p>
             </div>
           </div>
@@ -138,7 +238,14 @@ function DayCard({
           }}
         >
           {day.events.map((event, i) => (
-            <EventRow key={i} event={event} />
+            <EventRow
+              key={i}
+              event={event}
+              isSelected={selectedItineraryEventKey === eventKeyFor(event, i)}
+              onClick={() => handleEventClick(event, i)}
+              onMouseEnter={() => handleEventHover(event)}
+              onMouseLeave={() => setHoveredPlace(null)}
+            />
           ))}
         </div>
       </div>
@@ -147,7 +254,15 @@ function DayCard({
 }
 
 export function ItineraryTimeline() {
-  const { itinerary, selectedItineraryDay, setSelectedItineraryDay } = useTripStore()
+  const {
+    itinerary,
+    selectedItineraryDay,
+    setSelectedItineraryDay,
+    setSelectedItineraryEventKey,
+    itineraryRequested,
+    isStreaming,
+    setItineraryRequested,
+  } = useTripStore()
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Scroll to day when selected
@@ -158,12 +273,29 @@ export function ItineraryTimeline() {
   }, [selectedItineraryDay])
 
   if (!itinerary) {
+    // User clicked Generate, streaming finished, still no itinerary → failure
+    const generationFailed = itineraryRequested && !isStreaming
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3">
-        <div className="text-3xl opacity-30">🗺️</div>
+      <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
+        <div className="text-3xl opacity-30">{generationFailed ? "⚠️" : "🗺️"}</div>
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          Itinerary will appear here once the agent builds your trip plan.
+          {generationFailed
+            ? "Itinerary generation didn't complete. Try sending \"generate my itinerary\" again in the chat."
+            : "Itinerary will appear here once the agent builds your trip plan."}
         </p>
+        {generationFailed && (
+          <button
+            onClick={() => setItineraryRequested(false)}
+            className="text-xs px-3 py-1.5 rounded-lg cursor-pointer"
+            style={{
+              background: "var(--accent)",
+              color: "white",
+              boxShadow: "0 2px 8px rgba(24,95,165,0.4)",
+            }}
+          >
+            Retry from chat
+          </button>
+        )}
       </div>
     )
   }
@@ -180,16 +312,19 @@ export function ItineraryTimeline() {
           </h2>
           <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
             {itinerary.days.length} days ·{" "}
-            {new Date(itinerary.days[0]?.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+            {formatDisplayDate(itinerary.days[0]?.date, { day: "numeric", month: "short" }) ?? itinerary.days[0]?.date ?? "Dates pending"}
             {" – "}
-            {new Date(itinerary.days[itinerary.days.length - 1]?.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+            {formatDisplayDate(itinerary.days[itinerary.days.length - 1]?.date, { day: "numeric", month: "short" }) ?? itinerary.days[itinerary.days.length - 1]?.date ?? "Dates pending"}
           </p>
         </div>
 
         {/* Day filter pills */}
         <div className="flex gap-1.5 flex-wrap mb-6">
           <button
-            onClick={() => setSelectedItineraryDay(null)}
+            onClick={() => {
+              setSelectedItineraryDay(null)
+              setSelectedItineraryEventKey(null)
+            }}
             className="px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer"
             style={{
               background: !isFiltered ? "var(--accent)" : "var(--surface-3)",
@@ -204,7 +339,10 @@ export function ItineraryTimeline() {
             return (
               <button
                 key={day.day_number}
-                onClick={() => setSelectedItineraryDay(active ? null : day.day_number)}
+                onClick={() => {
+                  setSelectedItineraryDay(active ? null : day.day_number)
+                  setSelectedItineraryEventKey(null)
+                }}
                 className="px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer"
                 style={{
                   background: active ? "var(--accent)" : "var(--surface-3)",

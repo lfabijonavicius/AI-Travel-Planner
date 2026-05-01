@@ -6,6 +6,7 @@ from .currency import get_currency_exchange
 from .places import search_places
 from .budget import calculate_budget
 from .itinerary import generate_itinerary
+from .destinations import suggest_destinations
 
 all_tools = [
     get_country_info,
@@ -16,4 +17,5 @@ all_tools = [
     search_places,
     calculate_budget,
     generate_itinerary,
+    suggest_destinations,
 ]

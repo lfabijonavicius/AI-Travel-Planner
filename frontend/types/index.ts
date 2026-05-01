@@ -4,23 +4,42 @@ export type SSEEvent =
   | { type: "token"; content: string }
   | { type: "tool_start"; tool: string; inputs?: Record<string, unknown> }
   | { type: "tool_result"; tool: string; output: unknown }
+  | { type: "usage"; input_tokens: number; output_tokens: number; cost_usd: number }
   | { type: "error"; content: string }
+
+export interface TokenUsage {
+  input_tokens: number
+  output_tokens: number
+  cost_usd: number
+}
 
 // ── Tool output shapes ───────────────────────────────────────────────────────
 
 export interface FlightResult {
-  airline: string
-  airline_code: string
-  flight_number: string
-  origin: string
-  destination: string
-  departure_date: string
-  departure_time: string
-  return_date: string
-  stops: number
-  price_gbp: number
-  cabin: string
-  booking_url: string
+  kind?: "flight" | "advice"
+  airline?: string
+  airline_code?: string
+  flight_number?: string
+  origin?: string
+  destination?: string
+  departure_date?: string
+  departure_time?: string
+  return_date?: string
+  stops?: number
+  price_gbp?: number
+  cabin?: string
+  booking_url?: string
+  option_label?: string
+  note?: string
+  matches_requested_dates?: boolean
+  date_adjustment_days?: number
+  title?: string
+  summary?: string
+  details?: string
+  suggested_dates?: string[]
+  suggested_origins?: string[]
+  suggested_hubs?: string[]
+  confirmed_operators?: Array<{ name: string; iata: string; booking_url?: string }>
 }
 
 export interface HotelResult {
@@ -71,6 +90,24 @@ export interface PlaceResult {
   reviews?: PlaceReview[]
 }
 
+export interface DestinationSuggestion {
+  name: string
+  headline: string
+  country: string
+  region: string
+  description: string
+  why_now: string
+  best_for: string
+  tradeoff: string
+  plan_title: string
+  tags: string[]
+  lat: number | null
+  lng: number | null
+  photo_url: string | null
+  rating: number | null
+  rating_count: number | null
+}
+
 export interface CountryInfo {
   name: string
   capital: string
@@ -117,6 +154,19 @@ export interface ItineraryEvent {
   coordinates?: { lat: number; lng: number }
 }
 
+export interface ItineraryEventDetail {
+  time: string
+  title: string
+  subtitle: string
+  type: "flight" | "hotel" | "activity" | "poi" | "food" | "transport"
+  city?: string
+  date?: string
+  day_label?: string
+  price_local?: string
+  duration_minutes?: number
+  coordinates?: { lat: number; lng: number }
+}
+
 export interface ItineraryDay {
   day_number: number
   date: string
@@ -147,6 +197,7 @@ export interface ChatMessage {
   role: "user" | "assistant"
   content: string
   toolCalls?: ToolCall[]
+  hidden?: boolean
 }
 
 // ── Trip context sent with each request ─────────────────────────────────────

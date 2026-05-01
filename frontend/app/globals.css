@@ -49,6 +49,12 @@ h1, h2, h3, h4, h5, h6 {
   filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.8));
 }
 
+/* ── Hover preview ─────────────────────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Shimmer skeleton ────────────────────────────────────────────────────── */
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
@@ -153,6 +159,228 @@ h1, h2, h3, h4, h5, h6 {
     transparent 8px
   );
   margin-top: 4px;
+}
+
+/* ── Map QuickView tooltip (hover-only) ────────────────────────────────── */
+.voyager-quickview-wrap.leaflet-tooltip {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  white-space: normal !important;
+  pointer-events: none;
+  opacity: 1 !important;
+}
+.voyager-quickview-wrap.leaflet-tooltip::before,
+.voyager-quickview-wrap.leaflet-tooltip-top::before,
+.voyager-quickview-wrap.leaflet-tooltip-bottom::before,
+.voyager-quickview-wrap.leaflet-tooltip-left::before,
+.voyager-quickview-wrap.leaflet-tooltip-right::before {
+  display: none !important;
+}
+
+@keyframes qv-pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.voyager-quickview {
+  width: 240px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(28, 32, 46, 0.96) 0%, rgba(20, 23, 33, 0.98) 100%);
+  border: 1px solid rgba(91, 163, 232, 0.18);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 14px 38px rgba(0, 0, 0, 0.55),
+    0 4px 12px rgba(24, 95, 165, 0.18);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  animation: qv-pop-in 0.18s cubic-bezier(0.32, 0.72, 0, 1);
+  transform-origin: center bottom;
+}
+
+.voyager-quickview .qv-photo {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  background: #0f1218;
+  overflow: hidden;
+}
+
+.voyager-quickview .qv-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* Gentle zoom-in feel on appearance */
+  animation: qv-pop-in 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.voyager-quickview .qv-photo-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 38px;
+  opacity: 0.35;
+  background: linear-gradient(135deg, #1a1e2e, #0f1218);
+}
+
+/* Bottom gradient on the photo for legibility of overlaid title */
+.voyager-quickview .qv-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 35%,
+    rgba(0, 0, 0, 0.45) 70%,
+    rgba(0, 0, 0, 0.85) 100%
+  );
+  pointer-events: none;
+}
+
+/* Top-left category pill (glass) */
+.voyager-quickview .qv-tag {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  z-index: 2;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Top-right rating badge */
+.voyager-quickview .qv-rating {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.voyager-quickview .qv-rating .qv-star {
+  color: #fbbf24;
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* Status pill (Open / Closed) bottom-left of photo */
+.voyager-quickview .qv-status {
+  position: absolute;
+  bottom: 9px;
+  left: 9px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.voyager-quickview .qv-status::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+}
+.voyager-quickview .qv-status.is-open  { color: #22c55e; }
+.voyager-quickview .qv-status.is-closed { color: #f87171; }
+
+/* Body */
+.voyager-quickview .qv-body {
+  padding: 11px 13px 13px;
+}
+
+.voyager-quickview .qv-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #f1f3fa;
+  line-height: 1.3;
+  margin-bottom: 4px;
+  letter-spacing: -0.005em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.voyager-quickview .qv-meta {
+  font-size: 10.5px;
+  color: rgba(155, 163, 192, 0.95);
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.voyager-quickview .qv-meta .qv-dot {
+  opacity: 0.4;
+}
+.voyager-quickview .qv-meta .qv-stars {
+  color: #fbbf24;
+  letter-spacing: 1px;
+  font-size: 9px;
+}
+.voyager-quickview .qv-price {
+  color: #f1f3fa;
+  font-weight: 700;
+}
+
+/* CTA hint at the bottom */
+.voyager-quickview .qv-hint {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-light);
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.voyager-quickview .qv-hint span:last-child {
+  opacity: 0.7;
+  font-size: 11px;
 }
 
 /* ── Tool call pulse dot ─────────────────────────────────────────────────── */

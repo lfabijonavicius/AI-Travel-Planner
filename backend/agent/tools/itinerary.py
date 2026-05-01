@@ -1,11 +1,14 @@
 import re
 import json
 import time
+import logging
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from config import settings
 from agent.skills import inject_skill
+
+logger = logging.getLogger(__name__)
 
 ITINERARY_SYSTEM = """You are a travel itinerary planner. Output ONLY a raw JSON object — no prose, no markdown, no code fences.
 
@@ -25,24 +28,33 @@ def generate_itinerary(
     destination: str,
     start_date: str,
     end_date: str,
-    hotel: dict,
-    flights: dict,
-    places: list[dict],
-    weather: list[dict],
+    hotel: dict | None = None,
+    flights: dict | None = None,
+    places: list[dict] | None = None,
+    weather: list[dict] | None = None,
 ) -> dict:
     """Generate a structured day-by-day itinerary as JSON, stitching together flights,
     hotel check-in/out, recommended places, meals, and weather-aware activity scheduling.
     Call this last, after search_flights, search_hotels, search_places, get_weather_forecast,
-    and calculate_budget have all returned results.
+    and calculate_budget have all returned results. Pass the full results from those tools
+    as the hotel/flights/places/weather arguments.
     Returns a schema the frontend renders as a timeline."""
+    raw: str = ""
     try:
+        logger.info(f"generate_itinerary invoked: destination={destination} dates={start_date}..{end_date} places_count={len(places or [])} weather_count={len(weather or [])}")
+
+        # 30-second request timeout so a hung OpenAI call cannot wedge the tool forever
         llm = ChatOpenAI(
             model="gpt-4o-mini",
             temperature=0.2,
             openai_api_key=settings.openai_api_key,
+            request_timeout=30,  # type: ignore[call-arg]
+            max_retries=0,
         )
 
-        # Slim down inputs to avoid token overload
+        # Slim down inputs to avoid token overload. All inputs optional — degrade gracefully.
+        hotel = hotel or {}
+        flights = flights or {}
         slim_hotel = {k: hotel.get(k) for k in ("name", "stars", "price_per_night_gbp", "city")}
         slim_flights = {k: flights.get(k) for k in ("airline", "flight_number", "origin", "destination", "departure_date", "return_date", "departure_time")} if isinstance(flights, dict) else flights
         slim_places = [
@@ -67,13 +79,15 @@ def generate_itinerary(
 
         messages = [SystemMessage(content=ITINERARY_SYSTEM), HumanMessage(content=prompt)]
 
-        for attempt in range(3):
+        # Single attempt with short retry on rate-limit only
+        for attempt in range(2):
             try:
                 response = llm.invoke(messages)
                 break
             except Exception as e:
-                if "rate_limit" in str(e).lower() and attempt < 2:
-                    time.sleep(10 * (attempt + 1))
+                if "rate_limit" in str(e).lower() and attempt < 1:
+                    logger.warning(f"Itinerary rate-limited, retrying in 5s (attempt {attempt + 1})")
+                    time.sleep(5)
                 else:
                     raise
 
@@ -90,9 +104,16 @@ def generate_itinerary(
             raw = match.group(0)
 
         itinerary = json.loads(raw)
+        days_count = len(itinerary.get("days", [])) if isinstance(itinerary, dict) else 0
+        logger.info(f"Itinerary built for {destination}: {days_count} days")
+        if days_count == 0:
+            logger.warning(f"Itinerary has 0 days — raw output was: {raw[:400]}")
+        itinerary["__done"] = True  # signal to agent: itinerary complete, stop all tool calls
         return itinerary
 
     except json.JSONDecodeError as e:
+        logger.error(f"Itinerary JSON parse failed: {e}; raw: {raw[:400]}")
         return {"error": f"Itinerary JSON was malformed: {str(e)[:120]}"}
     except Exception as e:
+        logger.error(f"Itinerary generation failed: {e}", exc_info=True)
         return {"error": f"Itinerary generation failed: {str(e)[:120]}"}

@@ -12,10 +12,20 @@ const TOOL_LABELS: Record<string, string> = {
 interface Props {
   tool: string
   done?: boolean
+  inputs?: Record<string, unknown>
 }
 
-export function ToolCallIndicator({ tool, done }: Props) {
-  const label = TOOL_LABELS[tool] ?? tool
+function placeLabel(inputs?: Record<string, unknown>) {
+  const category = String(inputs?.category ?? "").trim()
+  if (!category) return "Finding local places"
+  return `Finding ${category}`
+}
+
+export function ToolCallIndicator({ tool, done, inputs }: Props) {
+  const label =
+    tool === "search_places"
+      ? placeLabel(inputs)
+      : TOOL_LABELS[tool] ?? tool
 
   return (
     <div className="flex items-center gap-2.5 py-1 px-1">

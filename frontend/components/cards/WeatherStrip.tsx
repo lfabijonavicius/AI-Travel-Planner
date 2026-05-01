@@ -7,15 +7,22 @@ interface Props {
 
 export function WeatherStrip({ data }: Props) {
   const cardRef = useScrollToLatest(data)
+  const safeDays = data.filter(
+    (day) =>
+      !!day &&
+      typeof day.date === "string" &&
+      Number.isFinite(day.temp_high_c) &&
+      Number.isFinite(day.temp_low_c)
+  )
 
-  if (!data?.length || (data[0] as any)?.error) {
+  if (!safeDays.length || (data[0] as any)?.error) {
     return null
   }
 
   return (
     <div ref={cardRef} className="my-2 rounded-xl overflow-hidden" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
-      <div className="grid" style={{ gridTemplateColumns: `repeat(${Math.min(data.length, 7)}, 1fr)` }}>
-        {data.slice(0, 7).map((day) => {
+      <div className="grid" style={{ gridTemplateColumns: `repeat(${Math.min(safeDays.length, 7)}, 1fr)` }}>
+        {safeDays.slice(0, 7).map((day) => {
           const isRainy = day.precipitation_probability >= 60
           return (
             <div

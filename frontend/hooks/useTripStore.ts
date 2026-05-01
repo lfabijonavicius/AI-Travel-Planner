@@ -10,9 +10,15 @@ import {
   CurrencyInfo,
   Itinerary,
   TripContext,
+  TokenUsage,
+  DestinationSuggestion,
+  ItineraryEventDetail,
 } from "@/types"
+import type { PlaceBrowseTheme } from "@/lib/placeBrowse"
 
 type Tab = "chat" | "itinerary"
+type InteractionMode = "planning" | "lookup" | "discovery" | "info" | null
+type DiscoveryHighlightFilter = "all" | "icons" | "attractions" | "restaurants"
 
 interface TripStore {
   // Chat
@@ -34,20 +40,39 @@ interface TripStore {
   budget: BudgetBreakdown | null
   currency: CurrencyInfo | null
   itinerary: Itinerary | null
-  setToolResult: (tool: string, output: unknown) => void
+  destinations: DestinationSuggestion[]
+  discoveryHighlights: PlaceResult[]
+  discoveryHighlightsLoading: boolean
+  discoveryHighlightFilter: DiscoveryHighlightFilter
+  setToolResult: (tool: string, output: unknown, inputs?: Record<string, unknown>) => void
+  setDiscoveryHighlights: (places: PlaceResult[]) => void
+  setDiscoveryHighlightsLoading: (loading: boolean) => void
+  setDiscoveryHighlightFilter: (filter: DiscoveryHighlightFilter) => void
+  hoveredBrowseSection: PlaceBrowseTheme | null
+  focusedBrowseSection: PlaceBrowseTheme | null
+  setHoveredBrowseSection: (section: PlaceBrowseTheme | null) => void
+  setFocusedBrowseSection: (section: PlaceBrowseTheme | null) => void
 
   // UI state
   activeTab: Tab
   setActiveTab: (tab: Tab) => void
   hasStarted: boolean
+  interactionMode: InteractionMode
+  setInteractionMode: (mode: InteractionMode) => void
 
   // Map hover sync
   hoveredPlaceId: string | null
   setHoveredPlace: (id: string | null) => void
 
+  // Flight path preview on hover
+  hoveredFlight: import("@/types").FlightResult | null
+  setHoveredFlight: (f: import("@/types").FlightResult | null) => void
+
   // Itinerary day filter
   selectedItineraryDay: number | null
   setSelectedItineraryDay: (day: number | null) => void
+  selectedItineraryEventKey: string | null
+  setSelectedItineraryEventKey: (key: string | null) => void
 
   // Trip context
   tripContext: TripContext
@@ -58,6 +83,18 @@ interface TripStore {
   selectedHotel: HotelResult | null
   setSelectedFlight: (f: FlightResult | null) => void
   setSelectedHotel: (h: HotelResult | null) => void
+
+  // Confirm bar dismissed once user clicks Generate
+  itineraryRequested: boolean
+  setItineraryRequested: (v: boolean) => void
+
+  // LLM token usage + cost (cumulative for session)
+  tokenUsage: TokenUsage
+  setTokenUsage: (u: TokenUsage) => void
+
+  // Chat pane collapsed state (map takes full width)
+  chatCollapsed: boolean
+  setChatCollapsed: (v: boolean) => void
 
   // Map target (fly-to on new places)
   targetLocation: { lat: number; lng: number } | null
@@ -75,6 +112,14 @@ interface TripStore {
   selectedHotelDetail: import("@/types").HotelResult | null
   setSelectedHotelDetail: (hotel: import("@/types").HotelResult | null) => void
 
+  // Destination detail preview card on the map side
+  selectedDestinationDetail: DestinationSuggestion | null
+  setSelectedDestinationDetail: (d: DestinationSuggestion | null) => void
+
+  // Fallback drawer content for itinerary events without a known place/hotel match
+  selectedItineraryEventDetail: ItineraryEventDetail | null
+  setSelectedItineraryEventDetail: (event: ItineraryEventDetail | null) => void
+
   // Skeleton cards shown while tools are running
   activeSkeletons: Partial<Record<"search_flights" | "search_hotels" | "get_weather_forecast" | "search_places" | "get_country_info", boolean>>
   addSkeleton: (tool: string) => void
@@ -85,6 +130,7 @@ export const useTripStore = create<TripStore>((set, get) => ({
   messages: [],
   isStreaming: false,
   hasStarted: false,
+  interactionMode: null,
 
   addMessage: (msg) =>
     set((s) => ({
@@ -123,6 +169,28 @@ export const useTripStore = create<TripStore>((set, get) => ({
     }),
 
   setStreaming: (v) => set({ isStreaming: v }),
+  setInteractionMode: (mode) =>
+    set((s) => ({
+      interactionMode: mode,
+      ...(mode !== "discovery"
+        ? {
+            destinations: [],
+            selectedDestinationDetail: null,
+            discoveryHighlights: [],
+            discoveryHighlightsLoading: false,
+            discoveryHighlightFilter: "all" as DiscoveryHighlightFilter,
+          }
+        : {}),
+      ...(mode !== "info"
+        ? {
+            hoveredBrowseSection: null,
+            focusedBrowseSection: null,
+          }
+        : {}),
+      ...(mode === "lookup" ? { selectedItineraryDay: null, selectedItineraryEventKey: null, hoveredFlight: null } : {}),
+      ...(mode === "planning" ? { itineraryRequested: false } : {}),
+      ...(mode === "lookup" && s.activeTab === "itinerary" ? { activeTab: "chat" } : {}),
+    })),
 
   addToolCallToLast: (tc) =>
     set((s) => {
@@ -164,6 +232,10 @@ export const useTripStore = create<TripStore>((set, get) => ({
   budget: null,
   currency: null,
   itinerary: null,
+  destinations: [],
+  discoveryHighlights: [],
+  discoveryHighlightsLoading: false,
+  discoveryHighlightFilter: "all",
 
   setToolResult: (tool, output) => {
     switch (tool) {
@@ -174,16 +246,37 @@ export const useTripStore = create<TripStore>((set, get) => ({
         set({ hotels: output as HotelResult[] })
         break
       case "get_weather_forecast":
-        set({ weather: output as WeatherDay[] })
+        set({
+          weather: Array.isArray(output)
+            ? (output as WeatherDay[]).filter(
+                (day) =>
+                  !!day &&
+                  typeof day.date === "string" &&
+                  Number.isFinite(day.temp_high_c) &&
+                  Number.isFinite(day.temp_low_c)
+              )
+            : [],
+        })
         break
       case "search_places": {
         const newPlaces = output as PlaceResult[]
         const first = newPlaces.find((p) => p.lat && p.lng)
+        const isLookupCategory = get().interactionMode === "lookup"
         set((s) => {
+          if (isLookupCategory) {
+            return {
+              places: newPlaces.filter((p) => p && p.name),
+              hoveredBrowseSection: null,
+              focusedBrowseSection: null,
+              ...(first ? { targetLocation: { lat: first.lat, lng: first.lng } } : {}),
+            }
+          }
           const existingNames = new Set(s.places.map((p) => p.name))
           const deduped = newPlaces.filter((p) => !existingNames.has(p.name))
           return {
             places: [...s.places, ...deduped],
+            hoveredBrowseSection: null,
+            focusedBrowseSection: null,
             ...(first ? { targetLocation: { lat: first.lat, lng: first.lng } } : {}),
           }
         })
@@ -198,11 +291,45 @@ export const useTripStore = create<TripStore>((set, get) => ({
       case "get_currency_exchange":
         set({ currency: output as CurrencyInfo })
         break
-      case "generate_itinerary":
-        set({ itinerary: output as Itinerary })
+      case "suggest_destinations": {
+        const dests = output as DestinationSuggestion[]
+        if (Array.isArray(dests) && dests.length > 0) {
+          set({ destinations: dests })
+          // Zoom to first destination on map
+          const first = dests.find((d) => d.lat && d.lng)
+          if (first && first.lat && first.lng) {
+            set({ targetLocation: { lat: first.lat, lng: first.lng } })
+          }
+        }
         break
+      }
+      case "generate_itinerary": {
+        const it = output as Itinerary
+        if (it && Array.isArray(it.days) && it.days.length > 0) {
+          set((s) => ({
+            itinerary: it,
+            activeTab: "itinerary",
+            tripContext: {
+              ...s.tripContext,
+              destination: it.destination || s.tripContext.destination,
+              start_date: it.days[0]?.date || s.tripContext.start_date,
+              end_date: it.days[it.days.length - 1]?.date || s.tripContext.end_date,
+            },
+          }))
+        }
+        break
+      }
     }
   },
+
+  setDiscoveryHighlights: (places) => set({ discoveryHighlights: places }),
+  setDiscoveryHighlightsLoading: (loading) => set({ discoveryHighlightsLoading: loading }),
+  setDiscoveryHighlightFilter: (filter) => set({ discoveryHighlightFilter: filter }),
+  hoveredBrowseSection: null,
+  focusedBrowseSection: null,
+  setHoveredBrowseSection: (section) => set({ hoveredBrowseSection: section }),
+  setFocusedBrowseSection: (section) =>
+    set((s) => ({ focusedBrowseSection: s.focusedBrowseSection === section ? null : section })),
 
   activeTab: "chat",
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -210,8 +337,14 @@ export const useTripStore = create<TripStore>((set, get) => ({
   hoveredPlaceId: null,
   setHoveredPlace: (id) => set({ hoveredPlaceId: id }),
 
+  hoveredFlight: null,
+  setHoveredFlight: (f) => set({ hoveredFlight: f }),
+
   selectedItineraryDay: null,
   setSelectedItineraryDay: (day) => set({ selectedItineraryDay: day }),
+
+  selectedItineraryEventKey: null,
+  setSelectedItineraryEventKey: (key) => set({ selectedItineraryEventKey: key }),
 
   tripContext: {},
   setTripContext: (ctx) => set((s) => ({ tripContext: { ...s.tripContext, ...ctx } })),
@@ -220,6 +353,15 @@ export const useTripStore = create<TripStore>((set, get) => ({
   selectedHotel: null,
   setSelectedFlight: (f) => set({ selectedFlight: f }),
   setSelectedHotel: (h) => set({ selectedHotel: h }),
+
+  itineraryRequested: false,
+  setItineraryRequested: (v) => set({ itineraryRequested: v }),
+
+  tokenUsage: { input_tokens: 0, output_tokens: 0, cost_usd: 0 },
+  setTokenUsage: (u) => set({ tokenUsage: u }),
+
+  chatCollapsed: false,
+  setChatCollapsed: (v) => set({ chatCollapsed: v }),
 
   targetLocation: null,
   setTargetLocation: (loc) => set({ targetLocation: loc }),
@@ -233,10 +375,29 @@ export const useTripStore = create<TripStore>((set, get) => ({
     }),
 
   selectedPlaceDetail: null,
-  setSelectedPlaceDetail: (place) => set({ selectedPlaceDetail: place, selectedHotelDetail: null }),
+  setSelectedPlaceDetail: (place) =>
+    set({ selectedPlaceDetail: place, selectedHotelDetail: null, selectedItineraryEventDetail: null }),
 
   selectedHotelDetail: null,
-  setSelectedHotelDetail: (hotel) => set({ selectedHotelDetail: hotel, selectedPlaceDetail: null }),
+  setSelectedHotelDetail: (hotel) =>
+    set({ selectedHotelDetail: hotel, selectedPlaceDetail: null, selectedItineraryEventDetail: null }),
+
+  selectedDestinationDetail: null,
+  setSelectedDestinationDetail: (d) =>
+    set({
+      selectedDestinationDetail: d,
+      selectedPlaceDetail: null,
+      selectedHotelDetail: null,
+      selectedItineraryEventDetail: null,
+      ...(d ? {} : { discoveryHighlights: [], discoveryHighlightsLoading: false, discoveryHighlightFilter: "all" as DiscoveryHighlightFilter }),
+    }),
+
+  selectedItineraryEventDetail: null,
+  setSelectedItineraryEventDetail: (event) =>
+    set({
+      selectedItineraryEventDetail: event,
+      ...(event ? { selectedPlaceDetail: null, selectedHotelDetail: null } : {}),
+    }),
 
   activeSkeletons: {},
   addSkeleton: (tool) =>
