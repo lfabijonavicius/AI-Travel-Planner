@@ -23,5 +23,6 @@ export function categoryIcon(category: string): string {
   if (c.includes("spa") || c.includes("wellness") || c.includes("thermal")) return "💆"
   if (c.includes("viewpoint") || c.includes("observation") || c.includes("tower")) return "🗼"
   if (c.includes("aquarium") || c.includes("zoo")) return "🐠"
+  if (c === "city") return "🏙️"
   return "📍"
 }

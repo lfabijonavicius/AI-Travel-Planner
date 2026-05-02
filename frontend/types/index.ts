@@ -67,6 +67,18 @@ export interface WeatherDay {
   precipitation_probability: number
 }
 
+export interface CurrentWeather {
+  city: string
+  temp_c: number
+  feels_like_c: number
+  temp_min_c: number
+  temp_max_c: number
+  humidity_pct: number
+  condition: string
+  weather_icon: string
+  wind_speed_ms: number
+}
+
 export interface PlaceReview {
   author: string
   author_photo: string | null

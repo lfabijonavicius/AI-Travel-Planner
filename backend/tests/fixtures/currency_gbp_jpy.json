@@ -1,0 +1,11 @@
+{
+  "result": "success",
+  "base_code": "GBP",
+  "conversion_rates": {
+    "GBP": 1.0,
+    "JPY": 192.5432,
+    "USD": 1.2634,
+    "EUR": 1.1782
+  },
+  "time_last_update_utc": "Fri, 01 May 2026 00:00:01 +0000"
+}

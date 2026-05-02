@@ -1,0 +1,13 @@
+[{
+  "name": {"common": "Japan", "official": "Japan"},
+  "capital": ["Tokyo"],
+  "languages": {"jpn": "Japanese"},
+  "currencies": {"JPY": {"name": "Japanese yen", "symbol": "¥"}},
+  "region": "Asia",
+  "subregion": "Eastern Asia",
+  "flags": {"emoji": "🇯🇵"},
+  "timezones": ["UTC+09:00"],
+  "idd": {"root": "+8", "suffixes": ["1"]},
+  "population": 125681593,
+  "car": {"side": "left"}
+}]

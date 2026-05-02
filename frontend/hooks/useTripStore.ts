@@ -97,8 +97,12 @@ interface TripStore {
   setChatCollapsed: (v: boolean) => void
 
   // Map target (fly-to on new places)
-  targetLocation: { lat: number; lng: number } | null
-  setTargetLocation: (loc: { lat: number; lng: number } | null) => void
+  targetLocation: { lat: number; lng: number; zoom?: number } | null
+  setTargetLocation: (loc: { lat: number; lng: number; zoom?: number } | null) => void
+
+  // City-level pin (single marker anchoring the map to a city)
+  cityPin: PlaceResult | null
+  setCityPin: (pin: PlaceResult | null) => void
 
   // Map pins
   pinnedPlaceIds: Set<string>
@@ -319,6 +323,16 @@ export const useTripStore = create<TripStore>((set, get) => ({
         }
         break
       }
+      case "get_city_pin": {
+        const pin = output as PlaceResult
+        if (pin && !("error" in (pin as any)) && pin.lat && pin.lng) {
+          set({
+            cityPin: { ...pin, category: "city" },
+            targetLocation: { lat: pin.lat, lng: pin.lng, zoom: 10 },
+          })
+        }
+        break
+      }
     }
   },
 
@@ -365,6 +379,9 @@ export const useTripStore = create<TripStore>((set, get) => ({
 
   targetLocation: null,
   setTargetLocation: (loc) => set({ targetLocation: loc }),
+
+  cityPin: null,
+  setCityPin: (pin) => set({ cityPin: pin }),
 
   pinnedPlaceIds: new Set(),
   togglePin: (name) =>

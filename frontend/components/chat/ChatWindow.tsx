@@ -11,15 +11,16 @@ import { useSSE } from "@/hooks/useSSE"
 import { SkeletonCard } from "@/components/cards/SkeletonCard"
 
 // Tools that render silently in the right panel — no inline card
-const SILENT_TOOLS = new Set(["calculate_budget", "get_currency_exchange", "generate_itinerary"])
+const SILENT_TOOLS = new Set(["calculate_budget", "get_currency_exchange", "generate_itinerary", "get_city_pin"])
 const LOW_CHROME_TOOLS = new Set(["suggest_destinations"])
 
 const SKELETON_TYPE_MAP: Record<string, "flight" | "hotel" | "weather" | "place" | "country"> = {
-  search_flights:       "flight",
-  search_hotels:        "hotel",
-  get_weather_forecast: "weather",
-  search_places:        "place",
-  get_country_info:     "country",
+  search_flights:        "flight",
+  search_hotels:         "hotel",
+  get_weather_forecast:  "weather",
+  get_current_weather:   "weather",
+  search_places:         "place",
+  get_country_info:      "country",
 }
 
 export function ChatWindow() {

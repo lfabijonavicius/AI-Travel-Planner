@@ -1,6 +1,7 @@
 import { FlightCard } from "@/components/cards/FlightCard"
 import { HotelCard } from "@/components/cards/HotelCard"
 import { WeatherStrip } from "@/components/cards/WeatherStrip"
+import { WeatherCurrentCard } from "@/components/cards/WeatherCurrentCard"
 import { PlaceCard } from "@/components/cards/PlaceCard"
 import { CountryInfoPanel } from "@/components/cards/CountryInfoPanel"
 import { DestinationCard } from "@/components/cards/DestinationCard"
@@ -8,6 +9,7 @@ import {
   FlightResult,
   HotelResult,
   WeatherDay,
+  CurrentWeather,
   PlaceResult,
   CountryInfo,
   DestinationSuggestion,
@@ -26,6 +28,8 @@ export function InlineCardRenderer({ tool, output }: Props) {
       return <HotelCard data={output as HotelResult[]} />
     case "get_weather_forecast":
       return <WeatherStrip data={output as WeatherDay[]} />
+    case "get_current_weather":
+      return <WeatherCurrentCard data={output as CurrentWeather} />
     case "search_places":
       return <PlaceCard data={output as PlaceResult[]} />
     case "get_country_info":

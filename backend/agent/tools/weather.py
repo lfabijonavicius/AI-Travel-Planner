@@ -5,6 +5,7 @@ from langchain_core.tools import tool
 from config import settings
 
 FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"
+CURRENT_URL = "https://api.openweathermap.org/data/2.5/weather"
 
 ICON_MAP = {
     "Clear": "☀️",
@@ -75,3 +76,43 @@ def get_weather_forecast(city: str, start_date: str, end_date: str) -> list[dict
         return [{"error": f"Weather forecast failed: {str(e)}"}]
     except Exception as e:
         return [{"error": f"Unexpected error: {str(e)}"}]
+
+
+@tool
+def get_current_weather(city: str) -> dict:
+    """Get the current weather conditions for a city right now.
+    Use this for questions about current or today's temperature, conditions, or weather.
+    Returns temperature in Celsius, feels-like, humidity, wind speed, and condition description."""
+    try:
+        response = requests.get(
+            CURRENT_URL,
+            params={
+                "q": city,
+                "appid": settings.openweather_api_key,
+                "units": "metric",
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        data = response.json()
+        main = data["main"]
+        wind = data.get("wind", {})
+        weather = data["weather"][0]
+        main_condition = weather["main"]
+        return {
+            "city": data.get("name", city),
+            "temp_c": round(main["temp"], 1),
+            "feels_like_c": round(main["feels_like"], 1),
+            "temp_min_c": round(main["temp_min"], 1),
+            "temp_max_c": round(main["temp_max"], 1),
+            "humidity_pct": main["humidity"],
+            "condition": weather["description"].title(),
+            "weather_icon": ICON_MAP.get(main_condition, "🌡️"),
+            "wind_speed_ms": round(wind.get("speed", 0), 1),
+        }
+    except requests.Timeout:
+        return {"error": "Weather request timed out. Try again."}
+    except requests.HTTPError as e:
+        return {"error": f"Weather lookup failed: {str(e)}"}
+    except Exception as e:
+        return {"error": f"Unexpected error: {str(e)}"}

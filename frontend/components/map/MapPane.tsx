@@ -279,6 +279,7 @@ export function MapPane() {
   const discoveryHighlightDecorRef = useRef<any[]>([])
   const discoveryCityMarkerRef = useRef<any>(null)
   const infoDecorRef = useRef<any[]>([])
+  const cityPinMarkerRef = useRef<any>(null)
 
   const [budgetOpen,   setBudgetOpen]   = useState(false)
   const [currencyOpen, setCurrencyOpen] = useState(false)
@@ -301,6 +302,7 @@ export function MapPane() {
     hoveredBrowseSection,
     focusedBrowseSection,
     setFocusedBrowseSection,
+    cityPin,
   } = useTripStore()
 
   const destMarkersRef = useRef<any[]>([])
@@ -333,6 +335,7 @@ export function MapPane() {
       const store = useTripStore.getState()
       const place = store.places.find((p) => p.name === name)
       if (place) { store.setSelectedPlaceDetail(place); return }
+      if (store.cityPin?.name === name) { store.setSelectedPlaceDetail(store.cityPin); return }
       const hotel = store.hotels.find((h) => h.name === name)
       if (hotel) store.setSelectedHotelDetail(hotel)
     }
@@ -487,16 +490,6 @@ export function MapPane() {
       zones.forEach((zone) => {
         const isFocused = !sectionFocus || zone.theme === sectionFocus
         const isOutlier = outlierZoneIds.has(zone.id)
-        const zoneCircle = L.circle([zone.centroid.lat, zone.centroid.lng], {
-          radius: zone.radiusMeters,
-          color: zone.accent,
-          weight: isFocused ? 1.1 : 0.8,
-          opacity: isFocused ? 0.26 : 0.08,
-          fillColor: zone.accent,
-          fillOpacity: isFocused ? (isOutlier ? 0.04 : 0.08) : 0.03,
-          dashArray: isOutlier ? "6 8" : undefined,
-        }).addTo(map)
-        infoDecorRef.current.push(zoneCircle)
 
         if (isOutlier && overallCenter) {
           const outlierConnector = L.polyline(
@@ -811,8 +804,63 @@ export function MapPane() {
   useEffect(() => {
     const map = leafletRef.current
     if (!map || !targetLocation) return
-    map.flyTo([targetLocation.lat, targetLocation.lng], 13, { duration: 1.5 })
+    map.flyTo([targetLocation.lat, targetLocation.lng], targetLocation.zoom ?? 13, { duration: 1.5 })
   }, [targetLocation])
+
+  // City-level pin (single prominent marker, not in cluster)
+  useEffect(() => {
+    const map = leafletRef.current
+    if (!map) return
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const L = require("leaflet")
+
+    if (cityPinMarkerRef.current) {
+      map.removeLayer(cityPinMarkerRef.current)
+      cityPinMarkerRef.current = null
+    }
+    if (!cityPin?.lat || !cityPin?.lng) return
+
+    const icon = L.divIcon({
+      className: "",
+      html: `<div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div style="width:48px;height:48px;border-radius:50%;background:rgba(13,18,30,0.97);border:2.5px solid #3d8cd6;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 0 0 8px rgba(61,140,214,0.12),0 6px 24px rgba(0,0,0,0.6)">🏙️</div>
+        <div style="padding:4px 10px;border-radius:8px;background:rgba(13,18,30,0.96);backdrop-filter:blur(10px);border:1px solid rgba(61,140,214,0.35);color:#eceef5;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,0.5);letter-spacing:-0.01em">${cityPin.name}</div>
+      </div>`,
+      iconSize: [160, 72],
+      iconAnchor: [24, 24],
+    })
+
+    const tooltipHtml = `
+      <div class="voyager-quickview">
+        <div class="qv-photo">
+          ${cityPin.photo_url
+            ? `<img src="${cityPin.photo_url}" alt=""/>`
+            : `<div class="qv-photo-empty">🏙️</div>`
+          }
+          <span class="qv-tag">🏙️ City</span>
+        </div>
+        <div class="qv-body">
+          <div class="qv-title">${cityPin.name}</div>
+          <div class="qv-meta"><span style="opacity:0.7">Click for photos &amp; info</span></div>
+          <div class="qv-hint"><span>Click for details</span><span>→</span></div>
+        </div>
+      </div>`
+
+    const marker = L.marker([cityPin.lat, cityPin.lng], { icon, zIndexOffset: 1000 })
+    marker.bindTooltip(tooltipHtml, {
+      direction: "top",
+      offset: [0, -12],
+      className: "voyager-quickview-wrap",
+      opacity: 1,
+      sticky: false,
+    })
+    marker.on("click", () => {
+      marker.closeTooltip()
+      ;(window as any).__voyagerOpenDrawer?.(cityPin.name)
+    })
+    marker.addTo(map)
+    cityPinMarkerRef.current = marker
+  }, [cityPin])
 
   // Pulse + fly-to on hover
   useEffect(() => {
@@ -961,15 +1009,6 @@ export function MapPane() {
     })
     discoveryCityMarkerRef.current = L.marker(anchorCoords, { icon: cityIcon, zIndexOffset: 600 }).addTo(map)
 
-    const halo = L.circle(anchorCoords, {
-      radius: 2600,
-      color: "#3d8cd6",
-      weight: 1,
-      opacity: 0.22,
-      fillColor: "#185FA5",
-      fillOpacity: 0.08,
-    }).addTo(map)
-    discoveryHighlightDecorRef.current.push(halo)
 
     filteredHighlights.slice(0, 10).forEach((place) => {
       const glyph = categoryIcon(place.category)

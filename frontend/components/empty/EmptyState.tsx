@@ -7,6 +7,7 @@ const SUGGESTIONS = [
   "Plan a week in Tokyo, budget £2,400",
   "Weekend in Barcelona for 2",
   "Surprise me — somewhere warm in June",
+  "What to do in Marrakech?",
 ]
 
 interface Props {

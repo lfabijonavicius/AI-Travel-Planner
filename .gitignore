@@ -27,6 +27,15 @@ frontend/next-env.d.ts
 .DS_Store
 Thumbs.db
 
+# ── Eval harness traces ──────────────────────────────────────────────────────
+backend/tests/agent_evals/.last_run/
+
+# ── Claude Code ──────────────────────────────────────────────────────────────
+.claude/
+CLAUDE.md
+CLAUDE_voyager.md
+CLAUDE.proposed.md
+
 # ── Editors ──────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
