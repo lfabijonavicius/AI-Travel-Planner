@@ -109,10 +109,12 @@ export function DrawerTab({ label, active, onClick }: { label: string; active: b
   return (
     <button
       onClick={onClick}
-      className="border-b-2 px-0 pb-2 pt-1 text-sm font-medium cursor-pointer transition-colors"
+      className="border-b-2 px-0 pb-2.5 pt-1 text-sm cursor-pointer transition-all"
       style={{
         color: active ? "var(--text)" : "var(--text-muted)",
-        borderColor: active ? "rgba(255,255,255,0.92)" : "transparent",
+        fontWeight: active ? 600 : 500,
+        borderColor: active ? "var(--accent-light)" : "transparent",
+        letterSpacing: "-0.005em",
       }}
     >
       {label}

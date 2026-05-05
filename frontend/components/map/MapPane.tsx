@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react"
 import "leaflet/dist/leaflet.css"
-import { useTripStore } from "@/hooks/useTripStore"
+import { useTripStore, cancelHoverClose as globalCancelHoverClose, scheduleHoverClose as globalScheduleHoverClose } from "@/hooks/useTripStore"
 import { PlaceDetailDrawer } from "./PlaceDetailDrawer"
-import { MapHoverCard, type HoverCardState } from "./MapHoverCard"
+import { type HoverCardState } from "./MapHoverCard"
 import { DestinationDetailPanel } from "./DestinationDetailPanel"
 import { categoryIcon, categoryIconSvg } from "@/lib/placeIcon"
 import { resolveItineraryEventEntity } from "@/lib/itineraryEventResolver"
@@ -56,8 +56,7 @@ export function MapPane() {
 
   const [budgetOpen,   setBudgetOpen]   = useState(false)
   const [currencyOpen, setCurrencyOpen] = useState(false)
-  const [hoverCard, setHoverCard] = useState<HoverCardState | null>(null)
-  const hoverCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const setHoverCard = useTripStore((s) => s.setHoverCard)
 
   const {
     places, hotels, pinnedPlaceIds,
@@ -82,26 +81,18 @@ export function MapPane() {
 
   const destMarkersRef = useRef<any[]>([])
 
-  const cancelHoverClose = () => {
-    if (hoverCloseTimerRef.current) {
-      clearTimeout(hoverCloseTimerRef.current)
-      hoverCloseTimerRef.current = null
-    }
-  }
-
-  const scheduleHoverClose = () => {
-    cancelHoverClose()
-    hoverCloseTimerRef.current = setTimeout(() => {
-      setHoverCard(null)
-    }, 140)
-  }
+  const cancelHoverClose = () => globalCancelHoverClose()
+  const scheduleHoverClose = () => globalScheduleHoverClose(() => setHoverCard(null), 140)
 
   const showHoverCardForMarker = (marker: any, target: HoverCardState["target"]) => {
     const map = leafletRef.current
-    if (!map) return
-    const point = map.latLngToContainerPoint(marker.getLatLng())
+    if (!map || !mapRef.current) return
+    const containerPoint = map.latLngToContainerPoint(marker.getLatLng())
+    const mapRect = mapRef.current.getBoundingClientRect()
+    const x = mapRect.left + containerPoint.x
+    const y = mapRect.top + containerPoint.y
     cancelHoverClose()
-    setHoverCard({ target, x: point.x, y: point.y })
+    setHoverCard({ target, x, y })
   }
 
   // Global bridges
@@ -160,10 +151,7 @@ export function MapPane() {
       useTripStore.getState().setFocusedBrowseSection(null)
     })
     map.on("movestart", () => {
-      if (hoverCloseTimerRef.current) {
-        clearTimeout(hoverCloseTimerRef.current)
-        hoverCloseTimerRef.current = null
-      }
+      globalCancelHoverClose()
       setHoverCard(null)
     })
     leafletRef.current = map
@@ -477,8 +465,8 @@ export function MapPane() {
       }
     })
     hotels.forEach((h) => {
-      if ((h as any).photo_urls?.length) {
-        urls.push(...(h as any).photo_urls.slice(0, 3))
+      if (h.photo_urls?.length) {
+        urls.push(...h.photo_urls.slice(0, 3))
       } else if (h.photo_url) {
         urls.push(h.photo_url)
       }
@@ -1071,19 +1059,6 @@ export function MapPane() {
       <PlaceDetailDrawer />
       <DestinationDetailPanel />
 
-      <MapHoverCard
-        state={hoverCard}
-        onMouseEnter={cancelHoverClose}
-        onMouseLeave={scheduleHoverClose}
-        onOpenDetail={() => {
-          if (!hoverCard) return
-          const name = hoverCard.target.kind === "place"
-            ? hoverCard.target.place.name
-            : hoverCard.target.hotel.name
-          setHoverCard(null)
-          ;(window as any).__voyagerOpenDrawer?.(name)
-        }}
-      />
 
       {/* Weather chip */}
       {interactionMode !== "discovery" && !selectedDestinationDetail && weather.length > 0 && isFiniteWeatherDay(weather[0]) && (

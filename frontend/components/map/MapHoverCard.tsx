@@ -1,31 +1,13 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { PlaceResult } from "@/types"
 import { categoryIcon } from "@/lib/placeIcon"
 import { classifyPlaceBrowseKind } from "@/lib/placeBrowse"
 import { currencySymbol } from "@/lib/currencyUtils"
+import type { StoreHoverTarget, StoreHoverState } from "@/hooks/useTripStore"
 
-export type HoverCardTarget =
-  | { kind: "place"; place: PlaceResult }
-  | {
-      kind: "hotel"
-      hotel: {
-        name: string
-        photo_url?: string
-        photo_urls?: string[]
-        review_score?: number | null
-        stars: number
-        price_per_night_gbp: number
-        currency: string
-      }
-    }
-
-export interface HoverCardState {
-  target: HoverCardTarget
-  x: number
-  y: number
-}
+export type HoverCardTarget = StoreHoverTarget
+export type HoverCardState = StoreHoverState
 
 interface Props {
   state: HoverCardState | null
@@ -109,7 +91,7 @@ export function MapHoverCard({ state, onMouseEnter, onMouseLeave, onOpenDetail }
     <div
       className="vp-card"
       style={{
-        position: "absolute",
+        position: "fixed",
         left: `${left}px`,
         top: `${top}px`,
         width: `${CARD_WIDTH}px`,

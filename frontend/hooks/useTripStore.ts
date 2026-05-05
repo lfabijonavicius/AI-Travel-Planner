@@ -16,6 +16,40 @@ import {
 } from "@/types"
 import type { PlaceBrowseTheme } from "@/lib/placeBrowse"
 
+// Shared hover-close timer — used by map markers, zone pins, and chat links
+let _hoverCloseTimer: ReturnType<typeof setTimeout> | null = null
+
+export function cancelHoverClose() {
+  if (_hoverCloseTimer) { clearTimeout(_hoverCloseTimer); _hoverCloseTimer = null }
+}
+
+export function scheduleHoverClose(close: () => void, ms = 150) {
+  cancelHoverClose()
+  _hoverCloseTimer = setTimeout(close, ms)
+}
+
+// Hover card state — shared between map markers and chat links
+export type StoreHoverTarget =
+  | { kind: "place"; place: PlaceResult }
+  | {
+      kind: "hotel"
+      hotel: {
+        name: string
+        photo_url?: string
+        photo_urls?: string[]
+        review_score?: number | null
+        stars: number
+        price_per_night_gbp: number
+        currency: string
+      }
+    }
+
+export interface StoreHoverState {
+  target: StoreHoverTarget
+  x: number
+  y: number
+}
+
 type Tab = "chat" | "itinerary"
 type InteractionMode = "planning" | "lookup" | "discovery" | "info" | null
 type DiscoveryHighlightFilter = "all" | "icons" | "attractions" | "restaurants"
@@ -63,6 +97,11 @@ interface TripStore {
   // Map hover sync
   hoveredPlaceId: string | null
   setHoveredPlace: (id: string | null) => void
+
+  // Hover card (shared between map and chat)
+  hoverCard: StoreHoverState | null
+  setHoverCard: (state: StoreHoverState | null) => void
+  showHoverCardAtPoint: (target: StoreHoverTarget, x: number, y: number) => void
 
   // Flight path preview on hover
   hoveredFlight: import("@/types").FlightResult | null
@@ -350,6 +389,10 @@ export const useTripStore = create<TripStore>((set, get) => ({
 
   hoveredPlaceId: null,
   setHoveredPlace: (id) => set({ hoveredPlaceId: id }),
+
+  hoverCard: null,
+  setHoverCard: (state) => set({ hoverCard: state }),
+  showHoverCardAtPoint: (target, x, y) => set({ hoverCard: { target, x, y } }),
 
   hoveredFlight: null,
   setHoveredFlight: (f) => set({ hoveredFlight: f }),

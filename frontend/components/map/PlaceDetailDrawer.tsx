@@ -156,7 +156,12 @@ export function PlaceDetailDrawer() {
   const [tripadvisorLoading, setTripadvisorLoading] = useState(false)
   const [eventLookupLoading, setEventLookupLoading] = useState(false)
   const galleryUrls = useMemo(
-    () => uniqueUrls([...(place?.photo_urls ?? []), place?.photo_url ?? null, hotel?.photo_url ?? null]),
+    () => uniqueUrls([
+      ...(place?.photo_urls ?? []),
+      place?.photo_url ?? null,
+      ...((hotel as any)?.photo_urls ?? []),
+      hotel?.photo_url ?? null,
+    ]),
     [place, hotel]
   )
   const detailSummary =
@@ -505,7 +510,7 @@ export function PlaceDetailDrawer() {
                 )}
               </div>
 
-              <h2 className="text-[38px] font-semibold leading-[0.98] tracking-[-0.04em] mb-2" style={{ color: "var(--text)" }}>
+              <h2 className="text-[32px] font-semibold leading-[1.05] tracking-[-0.025em] mb-2" style={{ color: "var(--text)" }}>
                 {name}
               </h2>
 
@@ -577,10 +582,21 @@ export function PlaceDetailDrawer() {
                   </>
                 ) : hotel ? (
                   <>
-                    <MetricCard label="Per night" value={`${currencySymbol(hotel.currency)}${hotel.price_per_night_gbp}`} tone="accent" />
-                    <MetricCard label="Total stay" value={`${currencySymbol(hotel.currency)}${hotel.total_price_gbp}`} />
-                    {tripadvisor?.details?.ranking_string ? <MetricCard label="Traveler rank" value={tripadvisor.details.ranking_string} tone="warm" /> : null}
-                    {tripadvisor?.details?.photo_count != null ? <MetricCard label="Traveler photos" value={tripadvisor.details.photo_count} /> : null}
+                    <MetricCard
+                      label="Per night"
+                      value={`${currencySymbol(hotel.currency)}${hotel.price_per_night_gbp.toLocaleString()}`}
+                      tone="accent"
+                    />
+                    <MetricCard
+                      label="Total stay"
+                      value={`${currencySymbol(hotel.currency)}${hotel.total_price_gbp.toLocaleString()}`}
+                    />
+                    {tripadvisor?.details?.ranking_string ? (
+                      <MetricCard label="Traveler rank" value={tripadvisor.details.ranking_string} tone="warm" />
+                    ) : null}
+                    {tripadvisor?.details?.photo_count != null ? (
+                      <MetricCard label="Traveler photos" value={tripadvisor.details.photo_count} />
+                    ) : null}
                   </>
                 ) : eventDetail ? (
                   <>
@@ -878,32 +894,32 @@ export function PlaceDetailDrawer() {
                   onClick={() => setSelectedHotel(isHotelSelected ? null : hotel)}
                   className="w-full py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer"
                   style={{
-                    background: isHotelSelected ? "var(--accent)" : "rgba(61,140,214,0.14)",
-                    color: isHotelSelected ? "white" : "var(--accent-light)",
-                    border: `1px solid ${isHotelSelected ? "var(--accent)" : "rgba(61,140,214,0.3)"}`,
-                    boxShadow: isHotelSelected ? "0 4px 16px rgba(24,95,165,0.4)" : "none",
+                    background: "var(--accent)",
+                    color: "white",
+                    border: "1px solid var(--accent)",
+                    boxShadow: "0 4px 16px rgba(24,95,165,0.42)",
                   }}
                 >
-                  {isHotelSelected ? "✓ Selected" : "Select Hotel"}
+                  {isHotelSelected ? "✓ Added to Trip" : "Add to Trip"}
                 </button>
                 <a
                   href={hotel.booking_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all"
-                  style={{ background: "var(--surface-2)", color: "var(--text-muted)", border: "1px solid var(--border)" }}
+                  className="w-full py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-opacity hover:opacity-80"
+                  style={{ background: "transparent", color: "var(--text-muted)", border: "none" }}
                 >
-                  Book on Booking.com <ArrowRight size={13} />
+                  View on Booking.com <ArrowRight size={11} />
                 </a>
                 {tripadvisor?.matched && tripadvisor.details?.hotel_booking?.bookable && tripadvisor.details.hotel_booking.booking_url && (
                   <a
                     href={tripadvisor.details.hotel_booking.booking_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all"
-                    style={{ background: "var(--surface-2)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.22)" }}
+                    className="w-full py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-opacity hover:opacity-80"
+                    style={{ background: "transparent", color: "#f59e0b", border: "none" }}
                   >
-                    Book on Tripadvisor <ArrowRight size={13} />
+                    Book on Tripadvisor <ArrowRight size={11} />
                   </a>
                 )}
                 {tripadvisor?.matched && tripadvisor.details?.web_url && (
@@ -911,10 +927,10 @@ export function PlaceDetailDrawer() {
                     href={tripadvisor.details.web_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 transition-all"
-                    style={{ background: "var(--surface-2)", color: "var(--text-muted)", border: "1px solid var(--border)" }}
+                    className="w-full py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-opacity hover:opacity-80"
+                    style={{ background: "transparent", color: "var(--text-muted)", border: "none" }}
                   >
-                    Open on Tripadvisor <ArrowRight size={13} />
+                    Open on Tripadvisor <ArrowRight size={11} />
                   </a>
                 )}
               </>

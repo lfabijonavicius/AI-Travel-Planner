@@ -11,7 +11,7 @@ from streaming import (
 )
 from agent.tools import generate_itinerary
 from agent.tools.places import lookup_place_core, search_places_core
-from tripadvisor import has_tripadvisor_key, lookup_location, enrich_location
+from services.tripadvisor import has_tripadvisor_key, lookup_location, enrich_location
 
 logging.basicConfig(level=logging.INFO)
 

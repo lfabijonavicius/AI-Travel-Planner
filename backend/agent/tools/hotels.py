@@ -1,13 +1,43 @@
 import time
+import logging
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from langchain_core.tools import tool
 from config import settings
+from agent.tools.places import _google_text_search
+
+logger = logging.getLogger(__name__)
 
 HOST = "booking-com.p.rapidapi.com"
 HEADERS = {
     "X-RapidAPI-Key": settings.rapidapi_key,
     "X-RapidAPI-Host": HOST,
 }
+
+
+def _enrich_hotel_photos(hotel_name: str, city: str, booking_photo: str | None) -> list[str]:
+    """Fetch additional hotel photos from Google Places.
+
+    Returns a list of photo URLs, deduplicated, with the Booking.com hero
+    photo first (if available). Falls back to whatever exists on error so
+    a Google failure never blocks the hotel response.
+    """
+    photos: list[str] = []
+    if booking_photo:
+        photos.append(booking_photo)
+
+    try:
+        query = f"{hotel_name}, {city}"
+        results = _google_text_search(query, "hotel", max_results=1, photos_per_place=5)
+        if results and not results[0].get("error"):
+            place_photos = results[0].get("photo_urls", []) or []
+            for url in place_photos:
+                if url and url not in photos:
+                    photos.append(url)
+    except Exception as e:
+        logger.debug(f"Hotel photo enrichment failed for {hotel_name!r}: {e}")
+
+    return photos[:5]  # cap at 5 photos per hotel
 
 
 @tool
@@ -20,7 +50,7 @@ def search_hotels(
 ) -> list[dict]:
     """Search for available hotels in a city for given dates.
     check_in and check_out must be 'YYYY-MM-DD'.
-    Returns hotels with name, star rating, price per night, photo URL, and booking URL."""
+    Returns hotels with name, star rating, price per night, photo gallery, and booking URL."""
     try:
         from datetime import date as _date
         today = _date.today()
@@ -72,16 +102,17 @@ def search_hotels(
         hotels = search_resp.json().get("result", [])[:max_results]
 
         nights = _nights(check_in, check_out)
-        results = []
+
+        # Step 3: build base hotel records (without enriched photos yet)
+        base_records: list[dict] = []
         for h in hotels:
             total = h.get("min_total_price") or 0
             currency = h.get("currencycode", "EUR")
-            photo = h.get("max_photo_url") or h.get("main_photo_url") or ""
-            # Use direct booking URL from result
+            booking_photo = h.get("max_photo_url") or h.get("main_photo_url") or ""
             booking_url = h.get("url") or f"https://www.booking.com/searchresults.html?ss={city}&checkin={check_in}&checkout={check_out}&group_adults={guests}"
             lat = h.get("latitude")
             lng = h.get("longitude")
-            entry = {
+            entry: dict = {
                 "name": h.get("hotel_name", "Unknown"),
                 "stars": int(h.get("class", 0) or 0),
                 "review_score": h.get("review_score"),
@@ -91,15 +122,40 @@ def search_hotels(
                 "currency": currency,
                 "address": h.get("address", ""),
                 "city": city,
-                "photo_url": photo,
+                "photo_url": booking_photo,
+                "photo_urls": [booking_photo] if booking_photo else [],
                 "booking_url": booking_url,
             }
             if lat is not None and lng is not None:
                 entry["lat"] = float(lat)
                 entry["lng"] = float(lng)
-            results.append(entry)
+            base_records.append(entry)
 
-        return results if results else [{"error": "No hotels found for these dates."}]
+        if not base_records:
+            return [{"error": "No hotels found for these dates."}]
+
+        # Step 4: enrich each hotel's photo gallery from Google Places, in parallel
+        if settings.google_places_api_key:
+            with ThreadPoolExecutor(max_workers=min(6, len(base_records))) as executor:
+                futures = {
+                    executor.submit(
+                        _enrich_hotel_photos,
+                        record["name"],
+                        city,
+                        record.get("photo_url") or None,
+                    ): index
+                    for index, record in enumerate(base_records)
+                }
+                for future in as_completed(futures, timeout=8):
+                    index = futures[future]
+                    try:
+                        enriched = future.result(timeout=4)
+                        if enriched:
+                            base_records[index]["photo_urls"] = enriched
+                    except Exception as e:
+                        logger.debug(f"Photo enrichment timed out for hotel index {index}: {e}")
+
+        return base_records
 
     except requests.Timeout:
         return [{"error": "Hotel search timed out. Try again."}]

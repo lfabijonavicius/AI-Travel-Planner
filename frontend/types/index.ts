@@ -53,6 +53,7 @@ export interface HotelResult {
   address: string
   city: string
   photo_url: string
+  photo_urls?: string[]
   booking_url: string
   lat?: number
   lng?: number

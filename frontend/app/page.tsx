@@ -9,6 +9,8 @@ import { ChatWindow } from "@/components/chat/ChatWindow"
 import { ItineraryTimeline } from "@/components/itinerary/ItineraryTimeline"
 import { TripHeader } from "@/components/layout/TripHeader"
 import { useEffect } from "react"
+import { MapHoverCard } from "@/components/map/MapHoverCard"
+import { cancelHoverClose, scheduleHoverClose } from "@/hooks/useTripStore"
 
 const MapPane = dynamic(
   () => import("@/components/map/MapPane").then((m) => m.MapPane),
@@ -28,6 +30,8 @@ export default function Home() {
     pinnedPlaceIds, selectedFlight, selectedHotel,
     tokenUsage, chatCollapsed, setChatCollapsed,
   } = useTripStore()
+  const hoverCard = useTripStore((s) => s.hoverCard)
+  const setHoverCard = useTripStore((s) => s.setHoverCard)
   const { sendMessage } = useSSE()
 
   const tripItemCount =
@@ -166,6 +170,20 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      <MapHoverCard
+        state={hoverCard}
+        onMouseEnter={cancelHoverClose}
+        onMouseLeave={() => scheduleHoverClose(() => setHoverCard(null), 300)}
+        onOpenDetail={() => {
+          if (!hoverCard) return
+          const name = hoverCard.target.kind === "place"
+            ? hoverCard.target.place.name
+            : hoverCard.target.hotel.name
+          setHoverCard(null)
+          ;(window as any).__voyagerOpenDrawer?.(name)
+        }}
+      />
 
       {/* ── Right pane: always-visible map ── */}
       <div className="flex-1 h-full min-w-0 relative">

@@ -1,9 +1,9 @@
 "use client"
 
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useRef } from "react"
 import { ChatMessage, PlaceResult } from "@/types"
-import { useTripStore } from "@/hooks/useTripStore"
+import { useTripStore, cancelHoverClose, scheduleHoverClose } from "@/hooks/useTripStore"
 import { categoryIcon } from "@/lib/placeIcon"
 import { buildBrowseMessageMarkdown } from "@/lib/placeBrowse"
 
@@ -16,22 +16,55 @@ interface Props {
 function PlaceLink({ storeName, children }: { storeName: string; children: React.ReactNode }) {
   const {
     setHoveredPlace, setSelectedPlaceDetail, setSelectedHotelDetail,
-    places, hotels, pinnedPlaceIds, destinations, countryInfo,
+    places, hotels, pinnedPlaceIds,
+    showHoverCardAtPoint, setHoverCard,
   } = useTripStore()
-  const [hovered, setHovered] = useState(false)
   const anchorRef = useRef<HTMLSpanElement>(null)
 
   const place = places.find((p) => p.name === storeName)
   const hotel = hotels.find((h) => h.name === storeName)
-  const destination = destinations.find(
-    (d) => d.name === storeName || d.country === storeName
-  )
-  const isCountry = countryInfo?.name === storeName
   const isPinned = pinnedPlaceIds.has(storeName)
-  const icon = hotel ? "🏨" : destination ? "🌍" : place ? categoryIcon(place.category) : "📍"
+  const icon = hotel ? "🏨" : place ? categoryIcon(place.category) : "📍"
 
-  // Entity matched — a preview can be shown on hover
-  const hasPreview = !!(place || hotel || destination || isCountry)
+  function handleMouseEnter() {
+    setHoveredPlace(storeName)
+    const node = anchorRef.current
+    if (!node) return
+    const rect = node.getBoundingClientRect()
+    // Left-align card with the link; MapHoverCard adds CARD_OFFSET (14) to x
+    const x = Math.max(0, rect.left - 14)
+    // Show card above the link when there's room (card is ~420px tall).
+    // MapHoverCard renders at top = state.y - 130, so back-calculate state.y:
+    //   above: card.top = rect.top - 428  → state.y = rect.top - 298
+    //   below: card.top = rect.bottom + 8 → state.y = rect.bottom + 138
+    const y = rect.top >= 450 ? rect.top - 298 : rect.bottom + 138
+    cancelHoverClose()
+    if (place) {
+      showHoverCardAtPoint({ kind: "place", place }, x, y)
+    } else if (hotel) {
+      showHoverCardAtPoint(
+        {
+          kind: "hotel",
+          hotel: {
+            name: hotel.name,
+            photo_url: hotel.photo_url,
+            photo_urls: (hotel as any).photo_urls,
+            review_score: hotel.review_score,
+            stars: hotel.stars,
+            price_per_night_gbp: hotel.price_per_night_gbp,
+            currency: hotel.currency,
+          },
+        },
+        x,
+        y
+      )
+    }
+  }
+
+  function handleMouseLeave() {
+    setHoveredPlace(null)
+    scheduleHoverClose(() => setHoverCard(null), 500)
+  }
 
   function handleClick() {
     if (place) { setSelectedPlaceDetail(place); return }
@@ -42,8 +75,8 @@ function PlaceLink({ storeName, children }: { storeName: string; children: React
   return (
     <span
       ref={anchorRef}
-      onMouseEnter={() => { setHovered(true); setHoveredPlace(storeName) }}
-      onMouseLeave={() => { setHovered(false); setHoveredPlace(null) }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       onClick={handleClick}
       style={{
         position: "relative",
@@ -52,16 +85,15 @@ function PlaceLink({ storeName, children }: { storeName: string; children: React
         gap: "4px",
         padding: "1px 7px 1px 6px",
         borderRadius: "6px",
-        background: hovered ? "rgba(91,163,232,0.18)" : "rgba(61,140,214,0.10)",
-        border: `1px solid ${hovered ? "rgba(123,191,245,0.5)" : "rgba(61,140,214,0.28)"}`,
-        color: hovered ? "#d0e5fa" : "#b8daf5",
+        background: "rgba(61,140,214,0.10)",
+        border: "1px solid rgba(61,140,214,0.28)",
+        color: "#b8daf5",
         cursor: "pointer",
         fontSize: "0.92em",
         fontWeight: 500,
         lineHeight: "1.5",
         transition: "all 0.15s",
         whiteSpace: "nowrap",
-        boxShadow: hovered ? "0 0 12px rgba(91,163,232,0.25)" : "none",
       }}
     >
       <span style={{ fontSize: "0.9em", opacity: 0.85 }}>{icon}</span>
@@ -85,121 +117,7 @@ function PlaceLink({ storeName, children }: { storeName: string; children: React
           ✓
         </span>
       )}
-      {hovered && hasPreview && (
-        <HoverPreview
-          photo={place?.photo_url ?? hotel?.photo_url ?? destination?.photo_url ?? null}
-          title={storeName}
-          subtitle={
-            hotel
-              ? `${hotel.city} · ${hotel.stars}★`
-              : destination
-                ? (destination.region || destination.country)
-                : place
-                  ? place.category
-                  : isCountry
-                    ? `${countryInfo.capital} · ${countryInfo.region}`
-                    : ""
-          }
-          description={
-            place?.summary ??
-            destination?.description ??
-            (isCountry
-              ? `${countryInfo.languages.join(", ")} · ${countryInfo.currencies[0]?.code ?? ""}`
-              : null)
-          }
-          rating={place?.rating ?? destination?.rating ?? hotel?.review_score ?? null}
-          price={hotel ? `£${hotel.price_per_night_gbp}/night` : null}
-          flag={isCountry ? countryInfo.flag : null}
-        />
-      )}
     </span>
-  )
-}
-
-function HoverPreview({
-  photo, title, subtitle, description, rating, price, flag,
-}: {
-  photo: string | null
-  title: string
-  subtitle: string
-  description: string | null
-  rating: number | null
-  price: string | null
-  flag: string | null
-}) {
-  return (
-    <div
-      style={{
-        position: "absolute",
-        bottom: "calc(100% + 8px)",
-        left: "0",
-        zIndex: 100,
-        width: 260,
-        borderRadius: 10,
-        overflow: "hidden",
-        background: "var(--surface-2)",
-        border: "1px solid var(--border)",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-        cursor: "default",
-        pointerEvents: "none",
-        animation: "fadeInUp 0.12s ease-out",
-      }}
-    >
-      {photo && (
-        <div style={{ position: "relative", height: 120, background: "#1a1e2e" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={photo} alt={title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          <div style={{
-            position: "absolute", inset: 0,
-            background: "linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.7))",
-          }} />
-          {rating != null && (
-            <div style={{
-              position: "absolute", top: 8, right: 8,
-              padding: "2px 7px", borderRadius: 5,
-              background: "rgba(0,0,0,0.7)", color: "white",
-              fontSize: 10, fontWeight: 700,
-            }}>★ {rating.toFixed(1)}</div>
-          )}
-          {price && (
-            <div style={{
-              position: "absolute", bottom: 6, left: 8,
-              color: "white", fontSize: 13, fontWeight: 700,
-            }}>{price}</div>
-          )}
-        </div>
-      )}
-      <div style={{ padding: "10px 12px 12px" }}>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 6,
-          fontSize: 13, fontWeight: 700, color: "var(--text)",
-          marginBottom: 2, lineHeight: 1.25,
-        }}>
-          {flag && <span style={{ fontSize: 14 }}>{flag}</span>}
-          <span style={{ whiteSpace: "normal" }}>{title}</span>
-        </div>
-        {subtitle && (
-          <div style={{
-            fontSize: 10, color: "var(--text-muted)",
-            textTransform: "capitalize", marginBottom: 6,
-          }}>
-            {subtitle}
-          </div>
-        )}
-        {description && (
-          <div style={{
-            fontSize: 11, color: "var(--text)", opacity: 0.85,
-            lineHeight: 1.5, whiteSpace: "normal",
-            display: "-webkit-box",
-            WebkitLineClamp: 3,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-          }}>
-            {description}
-          </div>
-        )}
-      </div>
-    </div>
   )
 }
 
