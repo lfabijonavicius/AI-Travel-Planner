@@ -19,6 +19,8 @@ A user types something like *"Plan a 5-day trip to Barcelona for 2 adults in Jun
 
 ## Screenshots
 
+<img src="docs/screenshots/01-login.png" width="900" alt="Login screen with Google auth">
+
 <img src="docs/screenshots/02-home.png" width="900" alt="Home screen with example prompts and map">
 
 <img src="docs/screenshots/05-destination-discovery.png" width="900" alt="Destination discovery — Surprise me somewhere warm in June">
@@ -28,8 +30,6 @@ A user types something like *"Plan a 5-day trip to Barcelona for 2 adults in Jun
 <img src="docs/screenshots/03-places-map.png" width="900" alt="Places pinned on map for Marrakech trip">
 
 <img src="docs/screenshots/06-place-hover-card.png" width="900" alt="Place hover card showing restaurant details">
-
-<img src="docs/screenshots/01-login.png" width="900" alt="Login screen with Google auth">
 
 ---
 
