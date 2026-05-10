@@ -31,6 +31,8 @@ A user types something like *"Plan a 5-day trip to Barcelona for 2 adults in Jun
 
 <img src="docs/screenshots/06-place-hover-card.png" width="900" alt="Place hover card showing restaurant details">
 
+<img src="docs/screenshots/07-place-detail-drawer.png" width="900" alt="Place detail drawer with photo gallery and Add to Itinerary">
+
 ---
 
 ## Architecture
