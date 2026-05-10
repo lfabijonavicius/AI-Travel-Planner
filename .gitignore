@@ -30,6 +30,9 @@ Thumbs.db
 # ── Eval harness traces ──────────────────────────────────────────────────────
 backend/tests/agent_evals/.last_run/
 
+# ── Temp / scratch ───────────────────────────────────────────────────────────
+.tmp-frames/
+
 # ── Claude Code ──────────────────────────────────────────────────────────────
 .claude/
 CLAUDE.md

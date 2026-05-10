@@ -126,9 +126,9 @@ def search_places_core(city: str, category: str = "attractions", max_results: in
     except requests.Timeout:
         return [{"error": "Places search timed out. Try again."}]
     except requests.HTTPError as e:
-        return [{"error": f"Places search failed: {str(e)}"}]
+        return [{"error": f"Places search failed: {str(e)[:120]}"}]
     except Exception as e:
-        return [{"error": f"Unexpected error: {str(e)}"}]
+        return [{"error": f"Unexpected error: {str(e)[:120]}"}]
 
 
 def lookup_place_core(query: str, city: str, category: str = "attractions", max_results: int = 5, photos_per_place: int = 3) -> list[dict]:
@@ -154,9 +154,9 @@ def lookup_place_core(query: str, city: str, category: str = "attractions", max_
     except requests.Timeout:
         return [{"error": "Place lookup timed out. Try again."}]
     except requests.HTTPError as e:
-        return [{"error": f"Place lookup failed: {str(e)}"}]
+        return [{"error": f"Place lookup failed: {str(e)[:120]}"}]
     except Exception as e:
-        return [{"error": f"Unexpected error: {str(e)}"}]
+        return [{"error": f"Unexpected error: {str(e)[:120]}"}]
 
 
 @tool

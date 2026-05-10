@@ -18,6 +18,8 @@ interface Props {
 
 const CARD_WIDTH = 320
 const CARD_OFFSET = 14
+// Minimum gap between card edge and viewport/map boundary
+const CARD_PADDING = 8
 
 export function MapHoverCard({ state, onMouseEnter, onMouseLeave, onOpenDetail }: Props) {
   const [imgIndex, setImgIndex] = useState(0)
@@ -55,7 +57,13 @@ export function MapHoverCard({ state, onMouseEnter, onMouseLeave, onOpenDetail }
   const hasMultiple = photos.length > 1
   const currentPhoto = photos[imgIndex] ?? null
 
-  const left = state.x + CARD_OFFSET
+  // Flip the card to the left of the pin when rendering to the right would overflow
+  // the viewport. The card uses position:fixed so we compare against window.innerWidth.
+  const naturalLeft = state.x + CARD_OFFSET
+  const wouldOverflowRight = naturalLeft + CARD_WIDTH > window.innerWidth - CARD_PADDING
+  const left = wouldOverflowRight
+    ? Math.max(CARD_PADDING, state.x - CARD_OFFSET - CARD_WIDTH)
+    : naturalLeft
   const top = state.y - 130
 
   const place = state.target.kind === "place" ? state.target.place : null
@@ -90,6 +98,7 @@ export function MapHoverCard({ state, onMouseEnter, onMouseLeave, onOpenDetail }
   return (
     <div
       className="vp-card"
+      data-testid="place-popup"
       style={{
         position: "fixed",
         left: `${left}px`,

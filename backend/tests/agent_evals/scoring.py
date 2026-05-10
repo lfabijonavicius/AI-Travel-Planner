@@ -47,9 +47,11 @@ def _check_tool_args(
 
 
 def _check_text(field: str, expected: Any, text: str) -> bool:
-    """Word-boundary match for strings; substring match for numbers."""
+    """Word-boundary match for strings; substring match for numbers (comma-tolerant)."""
     if isinstance(expected, (int, float)):
-        return str(int(expected)) in text or str(expected) in text
+        # Strip commas from the haystack so "£2,000" matches expected 2000.
+        haystack = text.replace(",", "")
+        return str(int(expected)) in haystack or str(expected) in haystack
     pattern = r"\b" + re.escape(str(expected)) + r"\b"
     return bool(re.search(pattern, text, re.IGNORECASE))
 

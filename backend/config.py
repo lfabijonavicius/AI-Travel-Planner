@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     supabase_service_key: str = ""
     aero_data_box: str = ""
 
+    # LangSmith observability — all optional, tracing is off when unset
+    langchain_tracing_v2: str = ""
+    langchain_api_key: str = ""
+    langchain_project: str = "voyager"
+    langchain_endpoint: str = ""
+
     class Config:
         env_file = ".env"
 

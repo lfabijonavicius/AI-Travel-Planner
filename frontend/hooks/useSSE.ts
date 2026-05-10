@@ -2,11 +2,22 @@
 
 import { useCallback } from "react"
 import { useTripStore } from "./useTripStore"
+import { useAuth } from "@/context/AuthContext"
+import { getSupabase } from "@/lib/supabase"
 import { SSEEvent, ChatMessage, Itinerary, ItineraryEvent, TripContext } from "@/types"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 const PLANNING_TOOL_SET = new Set(["search_flights", "search_hotels", "get_weather_forecast", "generate_itinerary", "calculate_budget"])
+const SNAPSHOT_LIMITS = {
+  flights: 3,
+  hotels: 4,
+  places: 10,
+  weather: 7,
+  pinned: 6,
+} as const
+
 export function useSSE() {
+  const { session } = useAuth()
   const { addMessage, appendToken, updateLastAssistantMessage, setStreaming, setToolResult, addToolCallToLast, resolveToolCall, addSkeleton, removeSkeleton, setTokenUsage, setTripContext, setInteractionMode } = useTripStore()
   const SEEDED_MESSAGES = new Set([
     "Pulling together a few contrasting warm-weather directions for June...",
@@ -196,6 +207,7 @@ export function useSSE() {
     if (s.flights.length) {
       snapshot.flights_found = s.flights
         .filter((f) => f.airline && f.price_gbp)
+        .slice(0, SNAPSHOT_LIMITS.flights)
         .map((f) => ({
           airline: f.airline,
           flight_number: f.flight_number ?? "",
@@ -210,6 +222,7 @@ export function useSSE() {
     if (s.hotels.length) {
       snapshot.hotels_found = s.hotels
         .filter((h) => h.name && h.city)
+        .slice(0, SNAPSHOT_LIMITS.hotels)
         .map((h) => ({
           name: h.name,
           city: h.city,
@@ -222,6 +235,7 @@ export function useSSE() {
     if (s.places.length) {
       snapshot.places_found = s.places
         .filter((p) => p.name)
+        .slice(0, SNAPSHOT_LIMITS.places)
         .map((p) => ({
           name: p.name,
           category: p.category,
@@ -232,7 +246,7 @@ export function useSSE() {
         }))
     }
     if (s.pinnedPlaceIds.size) {
-      snapshot.pinned_places = Array.from(s.pinnedPlaceIds).filter(Boolean)
+      snapshot.pinned_places = Array.from(s.pinnedPlaceIds).filter(Boolean).slice(0, SNAPSHOT_LIMITS.pinned)
     }
     if (s.selectedFlight) {
       snapshot.selected_flight = {
@@ -262,7 +276,7 @@ export function useSSE() {
       }
     }
     if (s.weather.length) {
-      snapshot.weather_data = s.weather.map((w) => ({
+      snapshot.weather_data = s.weather.slice(0, SNAPSHOT_LIMITS.weather).map((w) => ({
         date: w.date,
         condition: w.condition,
         weather_icon: w.weather_icon,
@@ -325,6 +339,76 @@ export function useSSE() {
     }
   }
 
+  function handleEvent(event: SSEEvent) {
+    switch (event.type) {
+      case "token": {
+        const s = useTripStore.getState()
+        const last = s.messages[s.messages.length - 1]
+        if (last?.role === "assistant" && SEEDED_MESSAGES.has(last.content.trim())) {
+          updateLastAssistantMessage(event.content)
+        } else {
+          appendToken(event.content)
+        }
+        break
+      }
+      case "tool_start":
+        const toolInputs =
+          event.inputs && typeof event.inputs === "object" ? (event.inputs as Record<string, unknown>) : undefined
+        // Extract destination from tool inputs whenever the agent targets a city
+        if (toolInputs?.city && typeof toolInputs.city === "string") {
+          const s = useTripStore.getState()
+          if (!s.tripContext.destination) {
+            setTripContext({ destination: toolInputs.city as string })
+          }
+        }
+        if (event.tool === "suggest_destinations") {
+          setInteractionMode("discovery")
+          const s = useTripStore.getState()
+          const last = s.messages[s.messages.length - 1]
+          if (last?.role === "assistant" && !last.content.trim()) {
+            updateLastAssistantMessage("Pulling together a few contrasting warm-weather directions for June...")
+          }
+        } else if (event.tool === "search_places") {
+          const s = useTripStore.getState()
+          const latestUser = [...s.messages].reverse().find((msg) => msg.role === "user" && !msg.hidden)?.content ?? ""
+          if (s.interactionMode === "planning") {
+            setInteractionMode("planning")
+          } else {
+            setInteractionMode(looksLikeInfoRequest(latestUser) ? "info" : "lookup")
+          }
+        } else if (
+          ["search_flights", "search_hotels", "get_weather_forecast", "generate_itinerary"].includes(event.tool)
+        ) {
+          setInteractionMode("planning")
+          const s = useTripStore.getState()
+          const last = s.messages[s.messages.length - 1]
+          if (last?.role === "assistant" && !last.content.trim()) {
+            updateLastAssistantMessage("Building the trip plan and checking the live pieces now...")
+          }
+        }
+        addToolCallToLast({ tool: event.tool, inputs: toolInputs })
+        if (["search_flights", "search_hotels", "get_weather_forecast", "search_places", "get_country_info"].includes(event.tool)) {
+          addSkeleton(event.tool)
+        }
+        break
+      case "tool_result":
+        setToolResult(event.tool, event.output)
+        resolveToolCall(event.tool, event.output)
+        removeSkeleton(event.tool)
+        break
+      case "usage":
+        setTokenUsage({
+          input_tokens: event.input_tokens,
+          output_tokens: event.output_tokens,
+          cost_usd: event.cost_usd,
+        })
+        break
+      case "error":
+        appendToken(`\n\n_${event.content}_`)
+        break
+    }
+  }
+
   const sendMessage = useCallback(
     async (text: string, context: TripContext = {}, hidden = false) => {
       if (Object.keys(context).length > 0) {
@@ -360,11 +444,17 @@ export function useSSE() {
         .map((m) => ({ role: m.role, content: m.content.slice(0, 800).trim() }))
       let sawPlanningToolThisTurn = false
 
+      const currentTripId = useTripStore.getState().currentTripId
+      const headers: Record<string, string> = { "Content-Type": "application/json" }
+      const { data: { session: freshSession } } = await getSupabase().auth.getSession()
+      const token = freshSession?.access_token ?? session?.access_token
+      if (token) headers["Authorization"] = `Bearer ${token}`
+
       try {
         const response = await fetch(`${API_URL}/api/chat/stream`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, context, snapshot, history }),
+          headers,
+          body: JSON.stringify({ message: text, context, snapshot, history, trip_id: currentTripId }),
         })
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -422,69 +512,6 @@ export function useSSE() {
     },
     [addMessage, appendToken, setStreaming, setToolResult, addToolCallToLast, resolveToolCall, addSkeleton, removeSkeleton, setTripContext] // eslint-disable-line react-hooks/exhaustive-deps
   )
-
-  function handleEvent(event: SSEEvent) {
-    switch (event.type) {
-      case "token": {
-        const s = useTripStore.getState()
-        const last = s.messages[s.messages.length - 1]
-        if (last?.role === "assistant" && SEEDED_MESSAGES.has(last.content.trim())) {
-          updateLastAssistantMessage(event.content)
-        } else {
-          appendToken(event.content)
-        }
-        break
-      }
-      case "tool_start":
-        const toolInputs =
-          event.inputs && typeof event.inputs === "object" ? (event.inputs as Record<string, unknown>) : undefined
-        if (event.tool === "suggest_destinations") {
-          setInteractionMode("discovery")
-          const s = useTripStore.getState()
-          const last = s.messages[s.messages.length - 1]
-          if (last?.role === "assistant" && !last.content.trim()) {
-            updateLastAssistantMessage("Pulling together a few contrasting warm-weather directions for June...")
-          }
-        } else if (event.tool === "search_places") {
-          const s = useTripStore.getState()
-          const latestUser = [...s.messages].reverse().find((msg) => msg.role === "user" && !msg.hidden)?.content ?? ""
-          if (s.interactionMode === "planning") {
-            setInteractionMode("planning")
-          } else {
-            setInteractionMode(looksLikeInfoRequest(latestUser) ? "info" : "lookup")
-          }
-        } else if (
-          ["search_flights", "search_hotels", "get_weather_forecast", "generate_itinerary"].includes(event.tool)
-        ) {
-          setInteractionMode("planning")
-          const s = useTripStore.getState()
-          const last = s.messages[s.messages.length - 1]
-          if (last?.role === "assistant" && !last.content.trim()) {
-            updateLastAssistantMessage("Building the trip plan and checking the live pieces now...")
-          }
-        }
-        addToolCallToLast({ tool: event.tool, inputs: toolInputs })
-        if (["search_flights", "search_hotels", "get_weather_forecast", "search_places", "get_country_info"].includes(event.tool)) {
-          addSkeleton(event.tool)
-        }
-        break
-      case "tool_result":
-        setToolResult(event.tool, event.output)
-        resolveToolCall(event.tool, event.output)
-        removeSkeleton(event.tool)
-        break
-      case "usage":
-        setTokenUsage({
-          input_tokens: event.input_tokens,
-          output_tokens: event.output_tokens,
-          cost_usd: event.cost_usd,
-        })
-        break
-      case "error":
-        appendToken(`\n\n_${event.content}_`)
-        break
-    }
-  }
 
   return { sendMessage }
 }

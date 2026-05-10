@@ -1,16 +1,19 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { MapPin, Briefcase, PanelLeftClose, PanelLeftOpen, Zap } from "lucide-react"
+import { Briefcase, PanelLeftClose, PanelLeftOpen, Zap } from "lucide-react"
 import { useTripStore } from "@/hooks/useTripStore"
 import { useSSE } from "@/hooks/useSSE"
 import { EmptyState } from "@/components/empty/EmptyState"
 import { ChatWindow } from "@/components/chat/ChatWindow"
 import { ItineraryTimeline } from "@/components/itinerary/ItineraryTimeline"
 import { TripHeader } from "@/components/layout/TripHeader"
+import { Sidebar } from "@/components/layout/Sidebar"
+import { LoginPage } from "@/components/auth/LoginPage"
 import { useEffect } from "react"
 import { MapHoverCard } from "@/components/map/MapHoverCard"
 import { cancelHoverClose, scheduleHoverClose } from "@/hooks/useTripStore"
+import { useAuth } from "@/context/AuthContext"
 
 const MapPane = dynamic(
   () => import("@/components/map/MapPane").then((m) => m.MapPane),
@@ -25,6 +28,7 @@ const TABS: { id: Tab; label: string }[] = [
 ]
 
 export default function Home() {
+  const { user, loading } = useAuth()
   const {
     hasStarted, activeTab, setActiveTab, itinerary,
     pinnedPlaceIds, selectedFlight, selectedHotel,
@@ -34,17 +38,30 @@ export default function Home() {
   const setHoverCard = useTripStore((s) => s.setHoverCard)
   const { sendMessage } = useSSE()
 
-  const tripItemCount =
-    pinnedPlaceIds.size + (selectedFlight ? 1 : 0) + (selectedHotel ? 1 : 0)
-
-  // Nudge Leaflet to resize after the pane collapse transition
+  // Must be before any conditional return
   useEffect(() => {
     const t = setTimeout(() => window.dispatchEvent(new Event("resize")), 320)
     return () => clearTimeout(t)
   }, [chatCollapsed])
 
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center" style={{ background: "var(--background)" }}>
+        <div className="w-6 h-6 rounded-full border-2 animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
+      </div>
+    )
+  }
+
+  if (!user) return <LoginPage />
+
+  const tripItemCount =
+    pinnedPlaceIds.size + (selectedFlight ? 1 : 0) + (selectedHotel ? 1 : 0)
+
   return (
     <div className="flex h-full" style={{ background: "var(--background)" }}>
+      {/* ── Sidebar ── */}
+      <Sidebar />
+
       {/* ── Left pane ── */}
       <div
         className="flex flex-col h-full flex-shrink-0 overflow-hidden"
@@ -64,16 +81,6 @@ export default function Home() {
             minHeight: "52px",
           }}
         >
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: "var(--accent)", boxShadow: "0 2px 8px rgba(24,95,165,0.5)" }}
-          >
-            <MapPin size={13} className="text-white" />
-          </div>
-          <span className="font-bold text-sm tracking-tight" style={{ color: "var(--text)" }}>
-            Voyager
-          </span>
-
           {hasStarted && (
             <div
               className="flex gap-0.5 ml-3 p-0.5 rounded-lg"

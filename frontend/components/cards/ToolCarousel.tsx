@@ -1,5 +1,7 @@
 "use client"
 
+import { useEffect, useRef } from "react"
+
 interface ToolCarouselProps {
   eyebrow?: string
   title?: string
@@ -9,6 +11,12 @@ interface ToolCarouselProps {
 }
 
 export function ToolCarousel({ eyebrow, title, description, followUps, children }: ToolCarouselProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0
+  }, [])
+
   return (
     <div className="my-4 space-y-4">
       {(eyebrow || title || description) && (
@@ -40,6 +48,7 @@ export function ToolCarousel({ eyebrow, title, description, followUps, children 
 
       <div className="relative">
         <div
+          ref={scrollRef}
           className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory"
           style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         >

@@ -51,6 +51,7 @@ export function DestinationDetailPanel() {
   return (
     <div className="absolute left-6 top-6 z-[1200] w-[316px] max-w-[calc(100%-3rem)] max-h-[calc(100vh-3rem)]">
       <div
+        data-testid="city-detail-card"
         className="overflow-hidden rounded-2xl max-h-[calc(100vh-3rem)] flex flex-col"
         style={{
           background: "var(--surface)",
@@ -61,6 +62,7 @@ export function DestinationDetailPanel() {
       >
         <button
           onClick={() => setSelectedDestinationDetail(null)}
+          data-testid="city-detail-card-close"
           className="absolute left-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full cursor-pointer"
           style={{ background: "rgba(10,14,22,0.72)", color: "white", border: "1px solid rgba(255,255,255,0.12)" }}
           aria-label="Close"

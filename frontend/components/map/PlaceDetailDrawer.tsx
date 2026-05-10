@@ -1,6 +1,6 @@
 "use client"
 
-import { X, MapPin, Star, ArrowRight, Clock3, Sparkles } from "lucide-react"
+import { X, MapPin, Star, ArrowRight, Clock3, Sparkles, ChevronLeft, ChevronRight } from "lucide-react"
 import { useTripStore } from "@/hooks/useTripStore"
 import { PlaceResult } from "@/types"
 import { useState, useEffect, useMemo } from "react"
@@ -145,6 +145,7 @@ export function PlaceDetailDrawer() {
   } = useTripStore()
   const [activeTab, setActiveTab] = useState<"overview" | "traveler" | "reviews" | "location" | "ask">("overview")
   const [drawerScrollTop, setDrawerScrollTop] = useState(0)
+  const [expandedPhotoIdx, setExpandedPhotoIdx] = useState<number | null>(null)
 
   const isOpen = place !== null || hotel !== null || eventDetail !== null
   const isPinned = place ? pinnedPlaceIds.has(place.name) : false
@@ -279,6 +280,7 @@ export function PlaceDetailDrawer() {
 
   useEffect(() => {
     setDrawerScrollTop(0)
+    setExpandedPhotoIdx(null)
   }, [name, place?.name, hotel?.name, eventDetail?.title, isOpen])
 
   function openItineraryEntry(entry: (typeof itineraryEntries)[number]) {
@@ -450,7 +452,7 @@ export function PlaceDetailDrawer() {
         }}
       >
         <div
-          className="h-full flex flex-col"
+          className="relative h-full flex flex-col"
           style={{ background: "var(--surface)", borderLeft: "1px solid var(--border)", boxShadow: "-4px 0 32px rgba(0,0,0,0.5)" }}
         >
           {/* Hero gallery */}
@@ -461,7 +463,7 @@ export function PlaceDetailDrawer() {
               transition: drawerScrollTop === 0 ? "height 0.22s ease" : "none",
             }}
           >
-            <MediaGallery urls={galleryUrls} alt={name} badgeLabel={heroLabel} statusLabel={statusLabel} />
+            <MediaGallery urls={galleryUrls} alt={name} badgeLabel={heroLabel} statusLabel={statusLabel} onPhotoExpand={setExpandedPhotoIdx} />
             <button
               onClick={close}
               className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-opacity hover:opacity-80"
@@ -972,6 +974,70 @@ export function PlaceDetailDrawer() {
               </>
             )}
           </div>
+
+          {/* Full-panel photo lightbox */}
+          {expandedPhotoIdx !== null && galleryUrls.length > 0 && (
+            <div
+              className="absolute inset-0 z-50 flex flex-col"
+              style={{ background: "rgba(0,0,0,0.96)" }}
+            >
+              {/* Main image */}
+              <div className="relative flex-1 flex items-center justify-center overflow-hidden">
+                <img
+                  src={galleryUrls[expandedPhotoIdx]}
+                  alt={`${name} ${expandedPhotoIdx + 1}`}
+                  className="max-h-full max-w-full object-contain"
+                  style={{ padding: "16px" }}
+                />
+                {galleryUrls.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setExpandedPhotoIdx((i) => ((i ?? 0) - 1 + galleryUrls.length) % galleryUrls.length)}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer"
+                      style={{ background: "rgba(255,255,255,0.1)", color: "white", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.15)" }}
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <button
+                      onClick={() => setExpandedPhotoIdx((i) => ((i ?? 0) + 1) % galleryUrls.length)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer"
+                      style={{ background: "rgba(255,255,255,0.1)", color: "white", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.15)" }}
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setExpandedPhotoIdx(null)}
+                  className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer"
+                  style={{ background: "rgba(255,255,255,0.12)", color: "white", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.15)" }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* Thumbnail strip */}
+              {galleryUrls.length > 1 && (
+                <div className="flex-shrink-0 flex gap-2 px-4 pb-4 pt-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+                  {galleryUrls.map((url, i) => (
+                    <button
+                      key={`lightbox-thumb-${i}`}
+                      onClick={() => setExpandedPhotoIdx(i)}
+                      className="flex-shrink-0 rounded-xl overflow-hidden cursor-pointer transition-all"
+                      style={{
+                        width: 64,
+                        height: 48,
+                        border: i === expandedPhotoIdx ? "2px solid rgba(255,255,255,0.85)" : "2px solid transparent",
+                        opacity: i === expandedPhotoIdx ? 1 : 0.5,
+                      }}
+                    >
+                      <img src={url} alt={`${name} ${i + 1}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </>

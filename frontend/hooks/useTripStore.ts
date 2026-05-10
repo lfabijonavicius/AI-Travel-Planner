@@ -159,6 +159,12 @@ interface TripStore {
   selectedDestinationDetail: DestinationSuggestion | null
   setSelectedDestinationDetail: (d: DestinationSuggestion | null) => void
 
+  // Tracks which destination's discovery markers are currently pinned on the map.
+  // Independent of the card: closing the card leaves markers in place.
+  // Replaced when the user clicks a different city; cleared on new chat / leaving discovery mode.
+  pinnedDiscoveryDestination: DestinationSuggestion | null
+  setPinnedDiscoveryDestination: (d: DestinationSuggestion | null) => void
+
   // Fallback drawer content for itinerary events without a known place/hotel match
   selectedItineraryEventDetail: ItineraryEventDetail | null
   setSelectedItineraryEventDetail: (event: ItineraryEventDetail | null) => void
@@ -167,6 +173,15 @@ interface TripStore {
   activeSkeletons: Partial<Record<"search_flights" | "search_hotels" | "get_weather_forecast" | "search_places" | "get_country_info", boolean>>
   addSkeleton: (tool: string) => void
   removeSkeleton: (tool: string) => void
+
+  // Persistence
+  currentTripId: string | null
+  setCurrentTripId: (id: string | null) => void
+  resetForNewTrip: (tripId: string | null) => void
+  restoreToolState: (state: Record<string, unknown>) => void
+  // Tracks how many messages were loaded from DB (already persisted — don't re-save)
+  dbMessageCount: number
+  setDbMessageCount: (n: number) => void
 }
 
 export const useTripStore = create<TripStore>((set, get) => ({
@@ -219,6 +234,7 @@ export const useTripStore = create<TripStore>((set, get) => ({
         ? {
             destinations: [],
             selectedDestinationDetail: null,
+            pinnedDiscoveryDestination: null,
             discoveryHighlights: [],
             discoveryHighlightsLoading: false,
             discoveryHighlightFilter: "all" as DiscoveryHighlightFilter,
@@ -240,7 +256,12 @@ export const useTripStore = create<TripStore>((set, get) => ({
       const msgs = [...s.messages]
       for (let i = msgs.length - 1; i >= 0; i--) {
         if (msgs[i].role === "assistant") {
-          msgs[i] = { ...msgs[i], toolCalls: [...(msgs[i].toolCalls ?? []), { tool: tc.tool, inputs: tc.inputs }] }
+          const nextCall = { tool: tc.tool, inputs: tc.inputs }
+          const toolCalls = [...(msgs[i].toolCalls ?? [])]
+          const nextKey = JSON.stringify(nextCall)
+          const duplicate = toolCalls.some((call) => JSON.stringify({ tool: call.tool, inputs: call.inputs }) === nextKey)
+          if (duplicate) return {}
+          msgs[i] = { ...msgs[i], toolCalls: [...toolCalls, nextCall] }
           return { messages: msgs }
         }
       }
@@ -363,8 +384,8 @@ export const useTripStore = create<TripStore>((set, get) => ({
         break
       }
       case "get_city_pin": {
-        const pin = output as PlaceResult
-        if (pin && !("error" in (pin as any)) && pin.lat && pin.lng) {
+        const pin = output as PlaceResult | { error?: string }
+        if (pin && !("error" in pin) && pin.lat && pin.lng) {
           set({
             cityPin: { ...pin, category: "city" },
             targetLocation: { lat: pin.lat, lng: pin.lng, zoom: 10 },
@@ -430,7 +451,11 @@ export const useTripStore = create<TripStore>((set, get) => ({
   togglePin: (name) =>
     set((s) => {
       const next = new Set(s.pinnedPlaceIds)
-      next.has(name) ? next.delete(name) : next.add(name)
+      if (next.has(name)) {
+        next.delete(name)
+      } else {
+        next.add(name)
+      }
       return { pinnedPlaceIds: next }
     }),
 
@@ -444,13 +469,26 @@ export const useTripStore = create<TripStore>((set, get) => ({
 
   selectedDestinationDetail: null,
   setSelectedDestinationDetail: (d) =>
-    set({
+    set((s) => ({
       selectedDestinationDetail: d,
       selectedPlaceDetail: null,
       selectedHotelDetail: null,
       selectedItineraryEventDetail: null,
-      ...(d ? {} : { discoveryHighlights: [], discoveryHighlightsLoading: false, discoveryHighlightFilter: "all" as DiscoveryHighlightFilter }),
-    }),
+      // Opening a destination pins it so its markers stay after the card closes.
+      // Switching to a different destination replaces the pin and resets highlights.
+      ...(d
+        ? {
+            pinnedDiscoveryDestination: d,
+            ...(d.name !== s.pinnedDiscoveryDestination?.name
+              ? { discoveryHighlights: [], discoveryHighlightsLoading: false, discoveryHighlightFilter: "all" as DiscoveryHighlightFilter }
+              : {}),
+          }
+        : {}),
+      // Closing the card (d=null) leaves pinnedDiscoveryDestination and highlights intact.
+    })),
+
+  pinnedDiscoveryDestination: null,
+  setPinnedDiscoveryDestination: (d) => set({ pinnedDiscoveryDestination: d }),
 
   selectedItineraryEventDetail: null,
   setSelectedItineraryEventDetail: (event) =>
@@ -468,5 +506,54 @@ export const useTripStore = create<TripStore>((set, get) => ({
       delete next[tool as keyof typeof next]
       return { activeSkeletons: next }
     }),
+
+  currentTripId: null,
+  setCurrentTripId: (id) => set({ currentTripId: id }),
+
+  dbMessageCount: 0,
+  setDbMessageCount: (n) => set({ dbMessageCount: n }),
+
+  resetForNewTrip: (tripId) =>
+    set({
+      currentTripId: tripId,
+      dbMessageCount: 0,
+      messages: [],
+      hasStarted: false,
+      isStreaming: false,
+      flights: [],
+      hotels: [],
+      weather: [],
+      places: [],
+      countryInfo: null,
+      budget: null,
+      currency: null,
+      itinerary: null,
+      destinations: [],
+      discoveryHighlights: [],
+      pinnedDiscoveryDestination: null,
+      selectedFlight: null,
+      selectedHotel: null,
+      tripContext: {},
+      activeTab: "chat",
+      interactionMode: null,
+      pinnedPlaceIds: new Set(),
+      cityPin: null,
+      targetLocation: null,
+      itineraryRequested: false,
+      activeSkeletons: {},
+    }),
+
+  restoreToolState: (state) => {
+    if (state.flights) set({ flights: state.flights as FlightResult[] })
+    if (state.hotels) set({ hotels: state.hotels as HotelResult[] })
+    if (state.weather) set({ weather: state.weather as WeatherDay[] })
+    if (state.places) set({ places: state.places as PlaceResult[] })
+    if (state.itinerary) set({ itinerary: state.itinerary as Itinerary, activeTab: "itinerary" })
+    if (state.tripContext) set({ tripContext: state.tripContext as TripContext })
+    if (state.selectedFlight) set({ selectedFlight: state.selectedFlight as FlightResult })
+    if (state.selectedHotel) set({ selectedHotel: state.selectedHotel as HotelResult })
+    if (state.cityPin) set({ cityPin: state.cityPin as PlaceResult })
+    if (state.destinations) set({ destinations: state.destinations as DestinationSuggestion[] })
+  },
 })
 )

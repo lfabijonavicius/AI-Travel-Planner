@@ -6,7 +6,7 @@ import { useTripStore, cancelHoverClose as globalCancelHoverClose, scheduleHover
 import { PlaceDetailDrawer } from "./PlaceDetailDrawer"
 import { type HoverCardState } from "./MapHoverCard"
 import { DestinationDetailPanel } from "./DestinationDetailPanel"
-import { categoryIcon, categoryIconSvg } from "@/lib/placeIcon"
+import { categoryIconSvg } from "@/lib/placeIcon"
 import { resolveItineraryEventEntity } from "@/lib/itineraryEventResolver"
 import { PlaceResult } from "@/types"
 import { buildPlaceMiniZones } from "@/lib/placeBrowse"
@@ -69,6 +69,7 @@ export function MapPane() {
     discoveryHighlights,
     discoveryHighlightFilter,
     selectedPlaceDetail, selectedHotelDetail, selectedDestinationDetail,
+    pinnedDiscoveryDestination,
     setSelectedPlaceDetail, setSelectedHotelDetail, setSelectedItineraryEventDetail, setTargetLocation, setSelectedItineraryDay, setSelectedItineraryEventKey,
     setDiscoveryHighlights, setDiscoveryHighlightsLoading,
     tripContext,
@@ -135,17 +136,69 @@ export function MapPane() {
   // Init map
   useEffect(() => {
     if (typeof window === "undefined" || !mapRef.current) return
+
+    const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY
+    const darkStyles = [
+      { elementType: "geometry", stylers: [{ color: "#1a1f2e" }] },
+      { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+      { elementType: "labels.text.fill", stylers: [{ color: "#7a8499" }] },
+      { elementType: "labels.text.stroke", stylers: [{ color: "#1a1f2e" }] },
+      { featureType: "administrative", elementType: "geometry", stylers: [{ color: "#2e3650" }] },
+      { featureType: "administrative.country", elementType: "labels.text.fill", stylers: [{ color: "#8892a4" }] },
+      { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#c8d0e0" }] },
+      { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#6b7590" }] },
+      { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#1b2535" }] },
+      { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#4a6070" }] },
+      { featureType: "road", elementType: "geometry.fill", stylers: [{ color: "#252d42" }] },
+      { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#7a8499" }] },
+      { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#2d3650" }] },
+      { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#1e5fa5" }] },
+      { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#163f70" }] },
+      { featureType: "road.local", elementType: "labels.text.fill", stylers: [{ color: "#556070" }] },
+      { featureType: "transit", elementType: "labels.text.fill", stylers: [{ color: "#6b7590" }] },
+      { featureType: "water", elementType: "geometry", stylers: [{ color: "#0d1520" }] },
+      { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#2a4a6a" }] },
+      { featureType: "landscape", elementType: "geometry", stylers: [{ color: "#1e2535" }] },
+      { featureType: "landscape.natural.terrain", stylers: [{ visibility: "on" }, { color: "#161d2c" }] },
+    ]
+
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const L = require("leaflet")
-    const map = L.map(mapRef.current, { center: [48, 12], zoom: 4, zoomControl: false })
-    L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
-      { attribution: "© CartoDB", subdomains: "abcd", maxZoom: 19 }
-    ).addTo(map)
-    L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png",
-      { attribution: "", subdomains: "abcd", maxZoom: 19, pane: "shadowPane" }
-    ).addTo(map)
+    ;(window as any).L = L
+
+    const map = L.map(mapRef.current, { center: [48, 12], zoom: 4, zoomControl: false, maxZoom: 20 })
+
+    const addGoogleLayer = () => {
+      const m = leafletRef.current
+      if (!m) return
+      const WL = (window as any).L ?? L
+      WL.gridLayer.googleMutant({ type: "terrain", styles: darkStyles }).addTo(m)
+    }
+
+    const loadGoogleMaps = () => {
+      if ((window as any).google?.maps) {
+        addGoogleLayer()
+      } else if (!document.querySelector('script[src*="maps.googleapis.com"]')) {
+        const gScript = document.createElement("script")
+        gScript.src = `https://maps.googleapis.com/maps/api/js?key=${googleKey}`
+        gScript.async = true
+        gScript.onload = addGoogleLayer
+        document.head.appendChild(gScript)
+      }
+    }
+
+    if ((window as any).L?.gridLayer?.googleMutant) {
+      loadGoogleMaps()
+    } else if (!document.querySelector('script[src*="GoogleMutant"]')) {
+      const pluginScript = document.createElement("script")
+      pluginScript.src = "https://unpkg.com/leaflet.gridlayer.googlemutant@latest/dist/Leaflet.GoogleMutant.js"
+      pluginScript.onload = loadGoogleMaps
+      document.head.appendChild(pluginScript)
+    } else {
+      // Script tag exists but may still be loading — add listener, don't call directly
+      document.querySelector('script[src*="GoogleMutant"]')!.addEventListener('load', loadGoogleMaps)
+    }
+
     L.control.zoom({ position: "topright" }).addTo(map)
     map.on("click", () => {
       useTripStore.getState().setFocusedBrowseSection(null)
@@ -158,16 +211,18 @@ export function MapPane() {
     return () => { map.remove(); leafletRef.current = null }
   }, [])
 
-  // Discovery highlights for the selected destination
+  // Discovery highlights for the pinned destination.
+  // Uses pinnedDiscoveryDestination (not selectedDestinationDetail) so highlights
+  // survive the card being closed — the card and the marker layer are independent.
   useEffect(() => {
-    if (interactionMode !== "discovery" || !selectedDestinationDetail) {
+    if (interactionMode !== "discovery" || !pinnedDiscoveryDestination) {
       setDiscoveryHighlights([])
       setDiscoveryHighlightsLoading(false)
       return
     }
 
-    const destinationQuery = [selectedDestinationDetail.name, selectedDestinationDetail.country].filter(Boolean).join(", ")
-    const cacheKey = discoveryKey(selectedDestinationDetail.name, selectedDestinationDetail.country)
+    const destinationQuery = [pinnedDiscoveryDestination.name, pinnedDiscoveryDestination.country].filter(Boolean).join(", ")
+    const cacheKey = discoveryKey(pinnedDiscoveryDestination.name, pinnedDiscoveryDestination.country)
     const cached = discoveryHighlightsCache.get(cacheKey)
     if (cached) {
       setDiscoveryHighlights(cached)
@@ -226,7 +281,7 @@ export function MapPane() {
     }
   }, [
     interactionMode,
-    selectedDestinationDetail,
+    pinnedDiscoveryDestination,
     setDiscoveryHighlights,
     setDiscoveryHighlightsLoading,
   ])
@@ -571,32 +626,12 @@ export function MapPane() {
       iconAnchor: [22, 22],
     })
 
-    const tooltipHtml = `
-      <div class="voyager-quickview">
-        <div class="qv-photo">
-          ${cityPin.photo_url
-            ? `<img src="${cityPin.photo_url}" alt=""/>`
-            : `<div class="qv-photo-empty">🏙️</div>`
-          }
-          <span class="qv-tag">🏙️ City</span>
-        </div>
-        <div class="qv-body">
-          <div class="qv-title">${cityPin.name}</div>
-          <div class="qv-meta"><span style="opacity:0.7">Click for photos &amp; info</span></div>
-          <div class="qv-hint"><span>Click for details</span><span>→</span></div>
-        </div>
-      </div>`
-
     const marker = L.marker([cityPin.lat, cityPin.lng], { icon, zIndexOffset: 1000 })
-    marker.bindTooltip(tooltipHtml, {
-      direction: "top",
-      offset: [0, -12],
-      className: "voyager-quickview-wrap",
-      opacity: 1,
-      sticky: false,
+    marker.on("mouseover", () => {
+      showHoverCardForMarker(marker, { kind: "place", place: cityPin })
     })
+    marker.on("mouseout", scheduleHoverClose)
     marker.on("click", () => {
-      marker.closeTooltip()
       ;(window as any).__voyagerOpenDrawer?.(cityPin.name)
     })
     marker.addTo(map)
@@ -664,7 +699,7 @@ export function MapPane() {
       const icon = L.divIcon({
         className: "",
         html: `
-          <div class="vp-wrap vp-dest vp-dest--${labelPosition}">
+          <div class="vp-wrap vp-dest vp-dest--${labelPosition}" data-testid="city-marker-${dest.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}">
             <div class="vp-pin vp-pin--dest">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
               ${dest.rating_count ? `<span class="vp-dest__star">★</span>` : ""}
@@ -718,14 +753,14 @@ export function MapPane() {
       discoveryCityMarkerRef.current = null
     }
 
-    if (interactionMode !== "discovery" || !selectedDestinationDetail?.lat || !selectedDestinationDetail?.lng) return
+    if (interactionMode !== "discovery" || !pinnedDiscoveryDestination?.lat || !pinnedDiscoveryDestination?.lng) return
 
     const filteredHighlights =
       discoveryHighlightFilter === "all"
         ? discoveryHighlights
         : discoveryHighlights.filter((place) => classifyDiscoveryCategory(place.category) === discoveryHighlightFilter)
 
-    const anchorCoords: [number, number] = [selectedDestinationDetail.lat, selectedDestinationDetail.lng]
+    const anchorCoords: [number, number] = [pinnedDiscoveryDestination.lat, pinnedDiscoveryDestination.lng]
     const cityIcon = L.divIcon({
       className: "",
       html: `
@@ -733,7 +768,7 @@ export function MapPane() {
           <div class="vp-pin vp-pin--anchor">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L9.5 8.5 2 9l6 5.5L6.5 22 12 18l5.5 4L16 14.5 22 9l-7.5-.5L12 2z"/></svg>
           </div>
-          <div class="vp-label vp-label--anchor">${selectedDestinationDetail.name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+          <div class="vp-label vp-label--anchor">${pinnedDiscoveryDestination.name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
         </div>
       `,
       iconSize: [190, 44],
@@ -742,30 +777,12 @@ export function MapPane() {
     discoveryCityMarkerRef.current = L.marker(anchorCoords, { icon: cityIcon, zIndexOffset: 600 }).addTo(map)
 
     filteredHighlights.slice(0, 10).forEach((place) => {
-      const glyph = categoryIcon(place.category)
       const kind = classifyDiscoveryCategory(place.category)
       const pinColor = kind === "restaurants" ? "#f59e0b" : kind === "icons" ? "#fbbf24" : "#3d8cd6"
-      const label = kind === "restaurants" ? "Food" : kind === "icons" ? "Iconic place" : "Sight"
-      const tooltipHtml = `
-        <div class="voyager-quickview">
-          <div class="qv-photo">
-            ${place.photo_url ? `<img src="${place.photo_url}" alt=""/>` : `<div class="qv-photo-empty">${glyph}</div>`}
-            <span class="qv-tag">${glyph} ${label}</span>
-            ${place.rating != null ? `<span class="qv-rating"><span class="qv-star">★</span>${place.rating.toFixed(1)}</span>` : ""}
-          </div>
-          <div class="qv-body">
-            <div class="qv-title">${place.name}</div>
-            <div class="qv-meta">
-              <span>${kind === "restaurants" ? "Worth eating at" : kind === "icons" ? "Signature stop" : "Worth exploring"}</span>
-              ${place.price_level ? `<span class="qv-dot">·</span><span class="qv-price">${place.price_level}</span>` : ""}
-            </div>
-            <div class="qv-hint"><span>Open detail</span><span>→</span></div>
-          </div>
-        </div>`
       const icon = L.divIcon({
         className: "",
         html: `
-          <div class="vp-wrap vp-highlight vp-highlight--${kind}">
+          <div class="vp-wrap vp-highlight vp-highlight--${kind}" data-testid="place-marker-${place.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}">
             <div class="vp-pin vp-pin--highlight">
               <span class="vp-icon">${categoryIconSvg(place.category)}</span>
             </div>
@@ -776,13 +793,10 @@ export function MapPane() {
         iconAnchor: [16, 16],
       })
       const marker = L.marker([place.lat, place.lng], { icon, zIndexOffset: 450 })
-      marker.bindTooltip(tooltipHtml, {
-        direction: "top",
-        offset: [0, -8],
-        className: "voyager-quickview-wrap",
-        opacity: 1,
-        sticky: false,
+      marker.on("mouseover", () => {
+        showHoverCardForMarker(marker, { kind: "place", place })
       })
+      marker.on("mouseout", scheduleHoverClose)
       marker.on("click", () => {
         setSelectedPlaceDetail(place)
         setTargetLocation({ lat: place.lat, lng: place.lng })
@@ -811,7 +825,7 @@ export function MapPane() {
     }
   }, [
     interactionMode,
-    selectedDestinationDetail,
+    pinnedDiscoveryDestination,
     discoveryHighlights,
     discoveryHighlightFilter,
     setSelectedPlaceDetail,
@@ -1054,7 +1068,7 @@ export function MapPane() {
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <div ref={mapRef} className="w-full h-full" />
+      <div ref={mapRef} className="w-full h-full" data-testid="map-container" />
 
       <PlaceDetailDrawer />
       <DestinationDetailPanel />

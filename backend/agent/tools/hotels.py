@@ -47,9 +47,12 @@ def search_hotels(
     check_out: str,
     guests: int = 2,
     max_results: int = 4,
+    sort_by: str = "price",
+    max_price_per_night_gbp: float | None = None,
 ) -> list[dict]:
     """Search for available hotels in a city for given dates.
     check_in and check_out must be 'YYYY-MM-DD'.
+    sort_by may be 'price' or 'popularity'. max_price_per_night_gbp is optional.
     Returns hotels with name, star rating, price per night, photo gallery, and booking URL."""
     try:
         from datetime import date as _date
@@ -92,14 +95,14 @@ def search_hotels(
                 "units": "metric",
                 "filter_by_currency": "GBP",
                 "locale": "en-gb",
-                "order_by": "popularity",
+                "order_by": "price" if str(sort_by).lower() != "popularity" else "popularity",
                 "page_number": 0,
                 "include_adjacency": "true",
             },
             timeout=15,
         )
         search_resp.raise_for_status()
-        hotels = search_resp.json().get("result", [])[:max_results]
+        hotels = search_resp.json().get("result", [])[: max(max_results * 6, 20)]
 
         nights = _nights(check_in, check_out)
 
@@ -130,6 +133,32 @@ def search_hotels(
                 entry["lat"] = float(lat)
                 entry["lng"] = float(lng)
             base_records.append(entry)
+
+        base_records = [record for record in base_records if record["price_per_night_gbp"] > 0]
+
+        if max_price_per_night_gbp is not None:
+            affordable = [
+                record for record in base_records
+                if record["price_per_night_gbp"] <= max_price_per_night_gbp
+            ]
+            if affordable:
+                base_records = affordable
+
+        if str(sort_by).lower() == "popularity":
+            base_records.sort(
+                key=lambda record: (
+                    -(record.get("review_score") or 0),
+                    record["price_per_night_gbp"],
+                )
+            )
+        else:
+            base_records.sort(
+                key=lambda record: (
+                    record["price_per_night_gbp"],
+                    -(record.get("review_score") or 0),
+                )
+            )
+        base_records = base_records[:max_results]
 
         if not base_records:
             return [{"error": "No hotels found for these dates."}]

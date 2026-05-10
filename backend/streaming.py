@@ -23,6 +23,42 @@ def _clean_result_list(value):
     return [item for item in value if isinstance(item, dict) and not item.get("error")]
 
 
+def _cap(items: list[dict], limit: int) -> list[dict]:
+    return items[:limit] if len(items) > limit else items
+
+
+def _with_more_note(items: list[dict], shown: list[dict]) -> str:
+    remaining = len(items) - len(shown)
+    return f" (+{remaining} more)" if remaining > 0 else ""
+
+
+def _summarize_places(places: list[dict], limit: int = 8) -> str:
+    shown = _cap(places, limit)
+    labels = []
+    for place in shown:
+        name = place.get("name")
+        if not name:
+            continue
+        category = place.get("category")
+        labels.append(f"{name} ({category})" if category else str(name))
+    return ", ".join(labels) + _with_more_note(places, shown)
+
+
+def _summarize_weather(days: list[dict], limit: int = 5) -> str:
+    shown = _cap(days, limit)
+    labels = []
+    for day in shown:
+        when = day.get("date") or "day"
+        icon = day.get("weather_icon") or ""
+        high = day.get("temp_high_c")
+        low = day.get("temp_low_c")
+        if high is not None and low is not None:
+            labels.append(f"{when} {icon} {high}C/{low}C".strip())
+        else:
+            labels.append(f"{when} {icon}".strip())
+    return ", ".join(labels) + _with_more_note(days, shown)
+
+
 def _has_valid_itinerary(output: object) -> bool:
     return (
         isinstance(output, dict)
@@ -95,25 +131,29 @@ def _build_context_message(request: ChatRequest) -> str:
     snap = request.snapshot
 
     if "flights_found" in snap:
+        flights = _clean_result_list(snap["flights_found"])
+        shown = _cap(flights, 3)
         summaries = [
             f"{f['airline']} {f['flight_number']} {f['route']} {f['departure_date']} £{f['price_gbp']}/person ({f['stops']} stop{'s' if f['stops'] != 1 else ''})"
-            for f in snap["flights_found"]
+            for f in shown
         ]
-        lines.append("Flights already shown to user: " + " | ".join(summaries))
+        if summaries:
+            lines.append("Flights already shown to user: " + " | ".join(summaries) + _with_more_note(flights, shown))
     if "hotels_found" in snap:
+        hotels = _clean_result_list(snap["hotels_found"])
+        shown = _cap(hotels, 4)
         summaries = [
             f"{h['name']} ({h['city']}) £{h['price_per_night_gbp']}/night £{h['total_price_gbp']} total"
-            for h in snap["hotels_found"]
+            for h in shown
         ]
-        lines.append("Hotels already shown to user: " + " | ".join(summaries))
+        if summaries:
+            lines.append("Hotels already shown to user: " + " | ".join(summaries) + _with_more_note(hotels, shown))
     if "places_found" in snap:
-        places = snap["places_found"]
-        if places and isinstance(places[0], dict):
-            lines.append("Places already shown to user (use these directly for generate_itinerary): " + json.dumps(places))
-        elif places:
-            lines.append("Places already shown to user: " + ", ".join(str(p) for p in places if p))
+        places = _clean_result_list(snap["places_found"])
+        if places:
+            lines.append("Places already shown to user: " + _summarize_places(places))
     if "pinned_places" in snap:
-        pins = [str(n) for n in snap["pinned_places"] if n]
+        pins = [str(n) for n in snap["pinned_places"] if n][:6]
         if pins:
             lines.append("Places user added to itinerary: " + ", ".join(pins))
     if "selected_flight" in snap:
@@ -126,7 +166,9 @@ def _build_context_message(request: ChatRequest) -> str:
         it = snap["itinerary_built"]
         lines.append(f"Itinerary already built: {it['days']} days in {it['destination']} ({it['start']} to {it['end']})")
     if "weather_data" in snap:
-        lines.append("Weather forecast (use directly for generate_itinerary): " + json.dumps(snap["weather_data"]))
+        weather = _clean_result_list(snap["weather_data"])
+        if weather:
+            lines.append("Weather already fetched: " + _summarize_weather(weather))
     if "currency_fetched" in snap:
         c = snap["currency_fetched"]
         lines.append(f"Exchange rate already fetched: 1 {c['base']} = {c['rate']} {c['target']}")
@@ -142,7 +184,7 @@ def _build_context_message(request: ChatRequest) -> str:
 # Public interface
 # ---------------------------------------------------------------------------
 
-async def stream_agent_response(request: ChatRequest) -> AsyncIterator[str]:
+async def stream_agent_response(request: ChatRequest, user_id: str = "") -> AsyncIterator[str]:
     """Yield SSE lines for a single chat turn.
 
     Event types:
@@ -271,7 +313,7 @@ async def stream_agent_response(request: ChatRequest) -> AsyncIterator[str]:
             yield line
 
     except Exception as e:
-        logger.error(f"Stream error: {e}")
-        yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+        logger.error(f"Stream error: {e}", exc_info=True)
+        yield f"data: {json.dumps({'type': 'error', 'content': 'An internal error occurred. Please try again.'})}\n\n"
     finally:
         yield "data: [DONE]\n\n"

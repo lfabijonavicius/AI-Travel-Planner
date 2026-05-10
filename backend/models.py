@@ -6,6 +6,7 @@ class ChatRequest(BaseModel):
     context: dict = {}
     snapshot: dict = {}
     history: list[dict] = []
+    trip_id: str | None = None
 
 
 class ItineraryBuildRequest(BaseModel):

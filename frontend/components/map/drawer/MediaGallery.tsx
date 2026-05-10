@@ -8,6 +8,7 @@ interface MediaGalleryProps {
   alt: string
   badgeLabel?: string | null
   statusLabel?: { text: string; color: string } | null
+  onPhotoExpand?: (index: number) => void
 }
 
 function tileButton({
@@ -53,23 +54,33 @@ function GalleryLayout({
   idx,
   alt,
   onSelect,
+  onExpand,
 }: {
   urls: string[]
   idx: number
   alt: string
   onSelect: (index: number) => void
+  onExpand: (index: number) => void
 }) {
   const currentUrl = urls[idx]
   const remainingUrls = urls.filter((_, i) => i !== idx)
   const totalCount = urls.length
 
+  function handleClick(index: number) {
+    if (index === idx) {
+      onExpand(index)
+    } else {
+      onSelect(index)
+    }
+  }
+
   if (totalCount === 1) {
     return (
       <div className="h-full w-full p-1.5">
-        <div className="relative h-full overflow-hidden rounded-[24px]">
+        <button className="relative h-full w-full overflow-hidden rounded-[24px] cursor-zoom-in" onClick={() => onExpand(0)}>
           <img src={currentUrl} alt={alt} className="h-full w-full object-cover" />
           <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.08), rgba(0,0,0,0.46))" }} />
-        </div>
+        </button>
       </div>
     )
   }
@@ -78,7 +89,7 @@ function GalleryLayout({
     return (
       <div className="grid h-full w-full grid-cols-2 gap-1.5 bg-black/20 p-1.5">
         {urls.map((url, index) =>
-          tileButton({ url, index, altText: `${alt} ${index + 1}`, className: "rounded-[24px]", active: index === idx, onClick: onSelect })
+          tileButton({ url, index, altText: `${alt} ${index + 1}`, className: "rounded-[24px]", active: index === idx, onClick: handleClick })
         )}
       </div>
     )
@@ -88,7 +99,7 @@ function GalleryLayout({
     return (
       <div className="grid h-full w-full grid-cols-3 gap-1.5 bg-black/20 p-1.5">
         {urls.map((url, index) =>
-          tileButton({ url, index, altText: `${alt} ${index + 1}`, className: "rounded-[22px]", active: index === idx, onClick: onSelect })
+          tileButton({ url, index, altText: `${alt} ${index + 1}`, className: "rounded-[22px]", active: index === idx, onClick: handleClick })
         )}
       </div>
     )
@@ -98,7 +109,7 @@ function GalleryLayout({
     return (
       <div className="grid h-full w-full grid-cols-2 grid-rows-2 gap-1.5 bg-black/20 p-1.5">
         {urls.map((url, index) =>
-          tileButton({ url, index, altText: `${alt} ${index + 1}`, className: "rounded-[22px]", active: index === idx, onClick: onSelect })
+          tileButton({ url, index, altText: `${alt} ${index + 1}`, className: "rounded-[22px]", active: index === idx, onClick: handleClick })
         )}
       </div>
     )
@@ -108,7 +119,7 @@ function GalleryLayout({
   const extraCount = remainingUrls.length - 4
   return (
     <div className="grid h-full w-full grid-cols-[1.45fr_1fr] gap-1.5 bg-black/20 p-1.5">
-      {tileButton({ url: currentUrl, index: idx, altText: alt, className: "rounded-[24px]", active: true, onClick: onSelect })}
+      {tileButton({ url: currentUrl, index: idx, altText: alt, className: "rounded-[24px]", active: true, onClick: handleClick })}
       <div className="grid grid-cols-2 grid-rows-2 gap-1.5">
         {sideTiles.map((tile, tileIndex) =>
           tileButton({
@@ -117,7 +128,7 @@ function GalleryLayout({
             altText: `${alt} ${tile.index + 1}`,
             className: "rounded-2xl",
             showOverlayCount: tileIndex === 3 && extraCount > 0 ? extraCount : undefined,
-            onClick: onSelect,
+            onClick: handleClick,
           })
         )}
       </div>
@@ -125,7 +136,7 @@ function GalleryLayout({
   )
 }
 
-export function MediaGallery({ urls, alt, badgeLabel, statusLabel }: MediaGalleryProps) {
+export function MediaGallery({ urls, alt, badgeLabel, statusLabel, onPhotoExpand }: MediaGalleryProps) {
   const [idx, setIdx] = useState(0)
   useEffect(() => { setIdx(0) }, [urls])
 
@@ -141,7 +152,7 @@ export function MediaGallery({ urls, alt, badgeLabel, statusLabel }: MediaGaller
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <GalleryLayout urls={urls} idx={idx} alt={alt} onSelect={setIdx} />
+      <GalleryLayout urls={urls} idx={idx} alt={alt} onSelect={setIdx} onExpand={onPhotoExpand ?? setIdx} />
 
       <div className="absolute left-4 top-4 flex items-center gap-2">
         {badgeLabel ? (

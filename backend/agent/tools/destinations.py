@@ -84,17 +84,19 @@ def _fetch_place_details(query: str) -> dict:
 def suggest_destinations(
     criteria: str,
     month: str = "",
+    origin: str = "",
     max_results: int = 5,
 ) -> list[dict]:
     """Suggest travel destinations matching a user's open-ended criteria.
     Use when the user asks for ideas, inspiration, or says things like 'surprise me',
     'somewhere warm', 'where should I go?', or 'suggest destinations'.
     criteria: free-text criteria (e.g. 'warm in May', 'beach + nightlife', 'cultural city break').
+    origin: IATA city/airport code or city name where the user is flying from. Pass when known.
     month: optional month name or YYYY-MM if relevant.
     Returns a list of destinations with name, country, description, photo, coordinates, and rating.
     Do NOT call the full trip-planning tools after this — the user must pick a destination first."""
     try:
-        logger.info(f"suggest_destinations invoked: criteria={criteria!r} month={month!r}")
+        logger.info(f"suggest_destinations invoked: criteria={criteria!r} month={month!r} origin={origin!r}")
 
         llm = ChatOpenAI(
             model="gpt-4o-mini",
@@ -106,6 +108,7 @@ def suggest_destinations(
 
         prompt = (
             f"User criteria: {criteria}\n"
+            f"Origin: {origin or 'unspecified'}\n"
             f"Month: {month or 'flexible'}\n"
             f"Return {max_results} destinations as a JSON array."
         )

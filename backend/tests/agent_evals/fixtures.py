@@ -143,6 +143,7 @@ FIXTURES: list[Fixture] = [
         ],
         "expected_mode": "planner",
         "expected_tools_any_of": [
+            [],  # agent asks for concrete dates within December — prompt requires YYYY-MM-DD
             ["search_flights", "search_hotels"],
             [
                 "search_flights",
