@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 _INPUT_COST_PER_1M = 0.40
 _OUTPUT_COST_PER_1M = 1.60
 
+# SSE (Server-Sent Events) format: each event is a line starting with "data: " followed by JSON.
+# The client reads these as a stream — no WebSocket needed, works with any HTTP/1.1 connection.
+
 
 # ---------------------------------------------------------------------------
 # Result helpers
@@ -123,6 +126,8 @@ def _build_itinerary_args_from_snapshot(context: dict, snapshot: dict) -> dict |
 # ---------------------------------------------------------------------------
 
 def _build_context_message(request: ChatRequest) -> str:
+    # Prepend a plain-English summary of what's already on screen so the LLM
+    # doesn't re-search for flights/hotels the user already sees.
     user_message = request.message
     if not request.snapshot:
         return user_message
@@ -187,13 +192,13 @@ def _build_context_message(request: ChatRequest) -> str:
 async def stream_agent_response(request: ChatRequest, user_id: str = "") -> AsyncIterator[str]:
     """Yield SSE lines for a single chat turn.
 
-    Event types:
-    - {type: "token", content: "..."}
-    - {type: "tool_start", tool: "...", inputs: {...}}
-    - {type: "tool_result", tool: "...", output: {...}}
-    - {type: "usage", input_tokens: N, output_tokens: N, cost_usd: N}
-    - {type: "error", content: "..."}
-    - [DONE]
+    Event types emitted to the frontend:
+    - {type: "token", content: "..."}        — one streamed text chunk
+    - {type: "tool_start", tool: "..."}      — agent is about to call a tool
+    - {type: "tool_result", tool: "..."}     — tool finished, here's the data
+    - {type: "usage", input_tokens: N, ...}  — token count + cost after each LLM call
+    - {type: "error", content: "..."}        — something went wrong
+    - [DONE]                                 — stream is finished, frontend can close
     """
     try:
         result_buffer: list[str] = []
@@ -302,6 +307,8 @@ async def stream_agent_response(request: ChatRequest, user_id: str = "") -> Asyn
                     f"data: {json.dumps({'type': 'tool_result', 'tool': tool_name, 'output': output})}\n\n"
                 )
 
+        # Only send tokens if no tools ran (pure text answer) or after the last tool finished.
+        # This prevents raw JSON tool arguments from leaking into the chat bubble.
         if not any_tool_called and pre_narrative_tokens:
             for chunk in pre_narrative_tokens:
                 yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"

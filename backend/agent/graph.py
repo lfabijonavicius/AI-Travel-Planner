@@ -27,8 +27,11 @@ def _build_llm(*, enable_tool_calls: bool) -> Any:
         openai_api_key=settings.openai_api_key,
     )
     if enable_tool_calls:
+        # Sequential tool calls: the model waits for each result before calling the next tool.
+        # This makes outputs more reliable — e.g. it can use the flight date when searching hotels.
         return llm.bind(parallel_tool_calls=False)
     return llm
 
 
+# Built once at startup and reused for every request — avoids re-compiling the graph per request
 graph = build_single_agent()

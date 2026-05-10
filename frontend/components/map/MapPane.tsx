@@ -707,7 +707,7 @@ export function MapPane() {
             <div class="vp-label vp-label--dest">${markerLabel.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
           </div>
         `,
-        iconSize: [170, 62],
+        iconSize: [34, 34],
         iconAnchor: [17, 17],
       })
       const marker = L.marker([dest.lat!, dest.lng!], { icon })

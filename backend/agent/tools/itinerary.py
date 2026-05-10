@@ -43,7 +43,7 @@ def generate_itinerary(
     try:
         logger.info(f"generate_itinerary invoked: destination={destination} dates={start_date}..{end_date} places_count={len(places or [])} weather_count={len(weather or [])}")
 
-        # 30-second request timeout so a hung OpenAI call cannot wedge the tool forever
+        # Separate LLM call just for itinerary generation — lower temperature for consistent JSON
         llm = ChatOpenAI(
             model="gpt-4o-mini",
             temperature=0.2,
@@ -108,7 +108,8 @@ def generate_itinerary(
         logger.info(f"Itinerary built for {destination}: {days_count} days")
         if days_count == 0:
             logger.warning(f"Itinerary has 0 days — raw output was: {raw[:400]}")
-        itinerary["__done"] = True  # signal to agent: itinerary complete, stop all tool calls
+        # Signal to the ReAct loop: itinerary is complete, no more tools needed
+        itinerary["__done"] = True
         return itinerary
 
     except json.JSONDecodeError as e:

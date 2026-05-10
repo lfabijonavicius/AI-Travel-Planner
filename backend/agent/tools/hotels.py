@@ -163,7 +163,7 @@ def search_hotels(
         if not base_records:
             return [{"error": "No hotels found for these dates."}]
 
-        # Step 4: enrich each hotel's photo gallery from Google Places, in parallel
+        # Fetch extra photos for all hotels concurrently — much faster than doing them one by one
         if settings.google_places_api_key:
             with ThreadPoolExecutor(max_workers=min(6, len(base_records))) as executor:
                 futures = {

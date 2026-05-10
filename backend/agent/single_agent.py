@@ -1,7 +1,8 @@
 """Single-agent variant: one ReAct graph with all 11 tools and the unified prompt.
 
-Feature-flagged via VOYAGER_AGENT_MODE=single. Production behaviour (flag unset)
-is unchanged — RoutedGraph is returned by build_agent_graph() in graph.py.
+ReAct (Reason + Act) is a prompting pattern where the LLM loops:
+  Thought → Tool call → Observation → Thought → … → Final answer
+LangGraph compiles this loop into a graph so it can be streamed and traced.
 """
 from __future__ import annotations
 
@@ -16,17 +17,9 @@ _PROMPT_PATH = Path(__file__).parent / "prompts" / "unified.md"
 
 
 def build_single_agent(model: str | None = None) -> Any:
-    """
-    Build a one-agent ReAct graph with all 11 tools and the unified prompt.
-    No router, no mode detection. Returns a compiled LangGraph identical in
-    interface to RoutedGraph (same .astream_events signature) so the harness
-    and main.py can swap them transparently.
-
-    Tools are read from agent.graph module attributes at call time so that
-    patch.multiple("agent.graph", ...) in the eval harness propagates into the
-    compiled graph without requiring a separate patching step.
-    """
-    import agent.graph as _g  # late import — reads patched attrs if inside patch context
+    """Build a compiled LangGraph ReAct agent with all 11 tools and the system prompt."""
+    # Late import so unit tests can monkey-patch agent.graph tools before the graph is compiled
+    import agent.graph as _g
 
     tools = [
         _g.get_country_info,
@@ -42,9 +35,11 @@ def build_single_agent(model: str | None = None) -> Any:
         _g.get_city_pin,
     ]  # 11 tools, deduplicated
 
+    # Inject today's date into the system prompt so the model knows the current date
     prompt = _PROMPT_PATH.read_text().replace("{{CURRENT_DATE}}", datetime.date.today().isoformat())
     llm = _g._build_llm(enable_tool_calls=True)
 
+    # create_react_agent wires up the Thought→Tool→Observation loop automatically
     return create_react_agent(
         model=llm,
         tools=tools,

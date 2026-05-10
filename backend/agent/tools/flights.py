@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from langchain_core.tools import tool
 from config import settings
 
-# Travelpayouts v1 calendar prices API — returns real flights with airline + departure times
+# Travelpayouts calendar API: returns cheapest fare for every day in a month for a given route
 CALENDAR_URL = "https://api.travelpayouts.com/v1/prices/calendar"
 AERODATABOX_URL = "https://aerodatabox.p.rapidapi.com"
 
@@ -311,7 +311,7 @@ def _expand_month_keys(requested_departure: date) -> list[str]:
 
 
 def _pick_best_options(flights: list[dict]) -> list[dict]:
-    # Primary sort: cheapest direct, then cheapest with stops, within ±7 days of requested date
+    # Priority: exact date direct → exact date with stops → nearby cheap — return max 3 options
     sorted_by_fit = sorted(
         flights,
         key=lambda flight: (
