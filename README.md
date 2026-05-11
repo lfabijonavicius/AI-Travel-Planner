@@ -180,6 +180,29 @@ create policy "own messages" on messages for all using (
 create policy "own state" on trip_state for all using (
   trip_id in (select id from trips where user_id = auth.uid())
 );
+
+-- Rate limiting
+create table user_rate_limits (
+  user_id uuid references auth.users not null,
+  date    date not null default current_date,
+  message_count int not null default 0,
+  primary key (user_id, date)
+);
+alter table user_rate_limits enable row level security;
+create policy "own limits" on user_rate_limits for all using (auth.uid() = user_id);
+
+create or replace function increment_message_count(p_user_id uuid)
+returns int language plpgsql security definer as $$
+declare new_count int;
+begin
+  insert into user_rate_limits (user_id, date, message_count)
+  values (p_user_id, current_date, 1)
+  on conflict (user_id, date)
+  do update set message_count = user_rate_limits.message_count + 1
+  returning message_count into new_count;
+  return new_count;
+end;
+$$;
 ```
 
 ---
@@ -216,6 +239,7 @@ Voyager calls `get_country_info` once and answers directly.
 ## Security
 
 - All API endpoints that consume paid quotas (`/api/places`, `/api/place-lookup`, `/api/tripadvisor/*`, `/api/itinerary/build`, `/api/chat/stream`) require a valid Supabase Bearer token
+- **Per-user rate limit** — `/api/chat/stream` enforces a 50 messages/day quota per user, tracked atomically in Supabase and returning 429 when exceeded
 - `max_results` parameters are bounded server-side (FastAPI `Query(ge=1, le=20)`) to prevent quota abuse
 - CORS is locked to `ALLOWED_ORIGINS` env var (defaults to `http://localhost:3000`)
 - The Supabase `service_role` key is backend-only; the client only ever sees the `anon` key
