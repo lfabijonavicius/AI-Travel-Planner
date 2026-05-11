@@ -1,9 +1,11 @@
-from fastapi import HTTPException, Header
+from fastapi import HTTPException, Header, Depends
 from supabase import create_client, Client
 from config import settings
 
 # Service role key has admin privileges — used only server-side, never sent to the browser
 _admin: Client = create_client(settings.supabase_url, settings.supabase_service_key)
+
+DAILY_MESSAGE_LIMIT = 50
 
 
 async def require_user(authorization: str = Header(None)) -> str:
@@ -22,3 +24,25 @@ async def require_user(authorization: str = Header(None)) -> str:
         return resp.user.id
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+async def require_user_with_rate_limit(user_id: str = Depends(require_user)) -> str:
+    """Extends require_user with a daily message quota.
+
+    Atomically increments the user's message count for today in Supabase.
+    Returns 429 if the daily limit is exceeded — applied only to /api/chat/stream.
+    """
+    try:
+        result = _admin.rpc("increment_message_count", {"p_user_id": user_id}).execute()
+        count = result.data
+        if count > DAILY_MESSAGE_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Daily limit of {DAILY_MESSAGE_LIMIT} messages reached. Resets at midnight.",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        # If rate limit check fails, allow the request rather than blocking the user
+        pass
+    return user_id

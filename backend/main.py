@@ -29,7 +29,7 @@ from streaming import (
 from agent.tools import generate_itinerary
 from agent.tools.places import lookup_place_core, search_places_core
 from services.tripadvisor import has_tripadvisor_key, lookup_location, enrich_location
-from auth import require_user
+from auth import require_user, require_user_with_rate_limit
 
 app = FastAPI(title="Voyager API")
 
@@ -104,5 +104,5 @@ def build_itinerary(request: ItineraryBuildRequest, user_id: str = Depends(requi
 
 
 @app.post("/api/chat/stream")
-async def stream_chat(request: ChatRequest, user_id: str = Depends(require_user)):
+async def stream_chat(request: ChatRequest, user_id: str = Depends(require_user_with_rate_limit)):
     return StreamingResponse(stream_agent_response(request, user_id), media_type="text/event-stream")
