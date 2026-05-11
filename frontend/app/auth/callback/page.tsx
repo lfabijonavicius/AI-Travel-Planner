@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect } from "react"
+import { Suspense, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { getSupabase } from "@/lib/supabase"
 
-export default function AuthCallback() {
+function AuthCallbackInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -32,5 +32,14 @@ export default function AuthCallback() {
       />
       <span className="text-sm">Signing in…</span>
     </div>
+  )
+}
+
+// useSearchParams() requires a Suspense boundary in Next.js 15+
+export default function AuthCallback() {
+  return (
+    <Suspense>
+      <AuthCallbackInner />
+    </Suspense>
   )
 }

@@ -1,6 +1,6 @@
 # Voyager — AI Travel Planning Agent
 
-Voyager is a full-stack AI travel assistant that plans trips end-to-end through natural conversation. It finds real flights and hotels, fetches live weather, suggests destinations, builds day-by-day itineraries, and pins everything on an interactive map — all from a single chat interface.
+Voyager is AI travel assistant that plans trips end-to-end through natural conversation. It finds real flights and hotels, fetches live weather, suggests destinations, builds day-by-day itineraries, and pins everything on an interactive map — all from a single chat interface.
 
 ## What it does
 
@@ -38,9 +38,9 @@ A user types something like *"Plan a 5-day trip to Barcelona for 2 adults in Jun
 ## Architecture
 
 ```
-┌──────────────────────────────┐     SSE stream      ┌────────────────────────┐
-│  Next.js 16 frontend         │ ◄─────────────────── │  FastAPI backend        │
-│  React 19 + Zustand store    │ ──── POST /chat ───► │  Python 3.13           │
+┌──────────────────────────────┐     SSE stream        ┌────────────────────────┐
+│  Next.js 16 frontend         │ ◄───────────────────  │  FastAPI backend       │
+│  React 19 + Zustand store    │ ──── POST /chat ───►  │  Python 3.13           │
 │  Leaflet map + Tailwind CSS  │                       │                        │
 └──────────────────────────────┘                       │  LangGraph ReAct agent │
                                                        │  11 tool functions     │
@@ -54,9 +54,6 @@ The agent is a **ReAct (Reason + Act) graph** built with LangGraph's `create_rea
 
 **Why single-agent over multi-agent routing?**
 An earlier version used a router that dispatched to specialised sub-agents (planning agent, info agent, discovery agent). This added latency and made it harder to share state between agents. The single-agent approach with a well-structured system prompt proved more reliable in eval, easier to debug, and eliminated the routing failure mode entirely.
-
-**Why SSE over WebSockets?**
-Server-Sent Events are unidirectional (server → client), which is exactly the shape of a streaming LLM response.
 
 ---
 

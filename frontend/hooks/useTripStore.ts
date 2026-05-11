@@ -385,7 +385,7 @@ export const useTripStore = create<TripStore>((set, get) => ({
       }
       case "get_city_pin": {
         const pin = output as PlaceResult | { error?: string }
-        if (pin && !("error" in pin) && pin.lat && pin.lng) {
+        if (pin && !("error" in pin) && "lat" in pin && pin.lat && pin.lng) {
           set({
             cityPin: { ...pin, category: "city" },
             targetLocation: { lat: pin.lat, lng: pin.lng, zoom: 10 },

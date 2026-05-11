@@ -1,3 +1,4 @@
+# Entry point for the AI agent — builds the LLM, registers all 11 tools, and exposes the compiled graph used by streaming.py
 from typing import Any
 
 from langchain_openai import ChatOpenAI
